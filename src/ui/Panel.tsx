@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import type { MensajeVisible } from "../repo/tipos";
 import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { EnlacesForge } from "./AvisoFicticio";
@@ -9,7 +9,7 @@ import { agruparPorDia, contarCitas, ETIQUETA_ESTADO, ETIQUETA_MODO, etiquetaHor
 type ConversacionVista = DatosPanel["conversaciones"][number];
 const AUTOR: Record<MensajeVisible["rol"], string> = { cliente: "Cliente", bot: "Bot", humano: "Tú (persona)", sistema: "Aviso" };
 const boton =
-  "min-h-11 rounded-lg px-4 text-sm font-semibold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed";
+  "min-h-11 rounded-lg px-4 text-sm font-semibold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed aria-disabled:opacity-60 aria-disabled:cursor-not-allowed";
 
 /** Texto del resultado de una acción del panel; el 429 trae además la salida a Forge Studio. */
 function AvisoAccion({ resultado }: { resultado: Resultado | null }) {
@@ -29,12 +29,16 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
   const [ocupado, setOcupado] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [texto, setTexto] = useState("");
+  const campo = useRef<HTMLInputElement>(null);
   const idCampo = useId();
   const { id, modo, mensajes } = conversacion;
   const ultimo = mensajes.at(-1);
   const enHumano = modo === "humano";
 
+  // Mientras hay una acción en curso los controles quedan con aria-disabled y no con disabled: un control
+  // desactivado suelta el foco (se va a <body>) y quien usa teclado o lector de pantalla pierde su lugar.
   async function accion(hacer: () => Promise<Resultado>, alSalirBien?: () => void) {
+    if (ocupado) return;
     setOcupado(true);
     setResultado(null);
     const r = await hacer();
@@ -49,7 +53,14 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
     e.preventDefault();
     const limpio = texto.trim();
     if (!limpio) return;
-    void accion(() => pedir("/api/panel/mensaje", { conversacionId: id, texto: limpio }), () => setTexto(""));
+    void accion(
+      () => pedir("/api/panel/mensaje", { conversacionId: id, texto: limpio }),
+      () => {
+        // Con el campo vacío, «Enviar» se desactiva: el foco vuelve al campo antes de que lo suelte.
+        campo.current?.focus();
+        setTexto("");
+      },
+    );
   };
 
   return (
@@ -85,7 +96,7 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
         <button
           type="button"
           onClick={() => void cambiarModo()}
-          disabled={ocupado}
+          aria-disabled={ocupado}
           className={`${boton} ${enHumano ? "border border-borde bg-white text-tinta hover:bg-stone-50" : "bg-marca text-white hover:bg-marca-fuerte"}`}
         >
           {enHumano ? "Devolver al bot" : "Tomar el chat"}
@@ -100,15 +111,21 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
           <div className="flex gap-2">
             <input
               id={idCampo}
+              ref={campo}
               name="respuesta"
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
-              disabled={ocupado}
+              readOnly={ocupado}
               maxLength={1000}
               autoComplete="off"
-              className="min-h-11 min-w-0 flex-1 rounded-lg border border-borde bg-white px-3 text-[1rem] disabled:bg-stone-100"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-borde bg-white px-3 text-[1rem] read-only:bg-stone-100"
             />
-            <button type="submit" disabled={ocupado || !texto.trim()} className={`${boton} shrink-0 bg-marca text-white hover:bg-marca-fuerte`}>
+            <button
+              type="submit"
+              disabled={!texto.trim()}
+              aria-disabled={ocupado}
+              className={`${boton} shrink-0 bg-marca text-white hover:bg-marca-fuerte`}
+            >
               Enviar
             </button>
           </div>
