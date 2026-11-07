@@ -54,9 +54,9 @@ export interface RepositorioConversaciones {
   obtenerOCrear(sesionId: string, negocioId: string): Promise<Conversacion>;
   obtener(sesionId: string, conversacionId: string): Promise<Conversacion>;
   /** Agrega al final; un mensaje con rol "cliente" suma uno a `mensajesVisitante`. */
-  agregarMensaje(conversacionId: string, m: MensajeVisible): Promise<void>;
+  agregarMensaje(sesionId: string, conversacionId: string, m: MensajeVisible): Promise<void>;
   /** Reemplaza el historial completo y guarda con qué versión del prompt se armó. */
-  guardarHistorialApi(conversacionId: string, historial: unknown[], versionPrompt: string | null): Promise<void>;
+  guardarHistorialApi(sesionId: string, conversacionId: string, historial: unknown[], versionPrompt: string | null): Promise<void>;
   cambiarModo(sesionId: string, conversacionId: string, modo: "bot" | "humano"): Promise<void>;
   listar(sesionId: string, negocioId: string): Promise<Conversacion[]>;
 }

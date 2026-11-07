@@ -115,13 +115,14 @@ export async function manejarMensaje(
 
   const mensajeCliente = { rol: "cliente" as const, texto: limpio, creadoEn: ahora().toISOString() };
   if (conv.modo === "humano") {
-    await repo.conversaciones.agregarMensaje(conv.id, mensajeCliente);
+    await repo.conversaciones.agregarMensaje(sesionId, conv.id, mensajeCliente);
     // También va al historial de la API, para que el bot tenga el contexto si le regresan la conversación.
-    await repo.conversaciones.guardarHistorialApi(conv.id, [...conv.historialApi, { role: "user", content: limpio }], conv.versionPrompt);
+    const historial = [...conv.historialApi, { role: "user", content: limpio }];
+    await repo.conversaciones.guardarHistorialApi(sesionId, conv.id, historial, conv.versionPrompt);
     return { estado: 200, respuesta: textos.enEspera, modo: "humano" };
   }
 
-  await repo.conversaciones.agregarMensaje(conv.id, mensajeCliente);
+  await repo.conversaciones.agregarMensaje(sesionId, conv.id, mensajeCliente);
   const bot = await deps.responder({ perfil, historialApi, mensaje: limpio, herramientas });
   // shortcut: cada petición (aquí y en `mensajeHumano`) lee la conversación al inicio y al final reemplaza el historial
   // de la API, sin candado. Carreras conocidas: (1) en modo bot, un doble clic, mensajes en paralelo o una persona que
@@ -130,8 +131,8 @@ export async function manejarMensaje(
   // leído al inicio y se puede pasar por unas cuantas; (3) en modo humano, si el visitante y la persona escriben a la
   // vez, uno de los dos mensajes queda visible pero fuera de historialApi. La interfaz desactiva el envío mientras hay
   // una petición en curso; si hace falta más, un candado por conversación (advisory lock en una RPC).
-  await repo.conversaciones.guardarHistorialApi(conv.id, bot.historialApi, version);
-  await repo.conversaciones.agregarMensaje(conv.id, { rol: "bot", texto: bot.texto, creadoEn: ahora().toISOString() });
+  await repo.conversaciones.guardarHistorialApi(sesionId, conv.id, bot.historialApi, version);
+  await repo.conversaciones.agregarMensaje(sesionId, conv.id, { rol: "bot", texto: bot.texto, creadoEn: ahora().toISOString() });
   if (bot.pasoAHumano) await repo.conversaciones.cambiarModo(sesionId, conv.id, "humano");
   return { estado: 200, respuesta: bot.texto, modo: bot.pasoAHumano ? "humano" : "bot" };
 }
@@ -158,10 +159,10 @@ export async function mensajeHumano(
   });
   if (!limite.permitido) return { estado: 429, respuesta: textos.limite };
 
-  await repo.conversaciones.agregarMensaje(conv.id, { rol: "humano", texto: limpio, creadoEn: ahora().toISOString() });
+  await repo.conversaciones.agregarMensaje(sesionId, conv.id, { rol: "humano", texto: limpio, creadoEn: ahora().toISOString() });
   // Va como mensaje `user` marcado: el bot conserva el contexto si le regresan la conversación.
   const historial = [...conv.historialApi, { role: "user", content: `[Respuesta de una persona del negocio]: ${limpio}` }];
-  await repo.conversaciones.guardarHistorialApi(conv.id, historial, conv.versionPrompt);
+  await repo.conversaciones.guardarHistorialApi(sesionId, conv.id, historial, conv.versionPrompt);
   return { estado: 200 };
 }
 

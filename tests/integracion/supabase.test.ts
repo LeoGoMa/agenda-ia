@@ -69,6 +69,7 @@ if (!url || !llave) {
       const repo = conSesion(crearRepoSupabase(cliente));
       const sesionId = crypto.randomUUID();
       await repo.conversaciones.obtenerOCrear(sesionId, "dental");
+      const mensaje = { rol: "cliente" as const, texto: "Hola", creadoEn: new Date().toISOString() };
       // El modelo o el cuerpo de una petición pueden traer cualquier texto como id.
       expect(await repo.citas.obtener(sesionId, "cita-1")).toBeNull();
       expect(await repo.citas.obtener("no-es-uuid", crypto.randomUUID())).toBeNull();
@@ -76,8 +77,10 @@ if (!url || !llave) {
       expect(await codigoDe(repo.citas.actualizar(sesionId, "cita-1", { estado: "cancelada" }, 1))).toBe("CITA_NO_ENCONTRADA");
       expect(await codigoDe(repo.conversaciones.obtener(sesionId, "conv-1"))).toBe("DATOS_INVALIDOS");
       expect(await codigoDe(repo.conversaciones.cambiarModo(sesionId, "conv-1", "humano"))).toBe("DATOS_INVALIDOS");
-      expect(await codigoDe(repo.conversaciones.guardarHistorialApi("conv-1", [], null))).toBe("DATOS_INVALIDOS");
-      expect(await codigoDe(repo.conversaciones.guardarHistorialApi(crypto.randomUUID(), [], null))).toBe("DATOS_INVALIDOS");
+      expect(await codigoDe(repo.conversaciones.guardarHistorialApi(sesionId, "conv-1", [], null))).toBe("DATOS_INVALIDOS");
+      expect(await codigoDe(repo.conversaciones.guardarHistorialApi(sesionId, crypto.randomUUID(), [], null))).toBe("DATOS_INVALIDOS");
+      expect(await codigoDe(repo.conversaciones.agregarMensaje(sesionId, "conv-1", mensaje))).toBe("DATOS_INVALIDOS");
+      expect(await codigoDe(repo.conversaciones.agregarMensaje("no-es-uuid", crypto.randomUUID(), mensaje))).toBe("DATOS_INVALIDOS");
       expect(await repo.conversaciones.listar("no-es-uuid", "dental")).toEqual([]);
     });
 
@@ -91,7 +94,7 @@ if (!url || !llave) {
         { role: "user", content: "Agéndeme el martes" },
         { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "agendar_cita", input }] },
       ];
-      await repo.conversaciones.guardarHistorialApi(id, historial, "v1");
+      await repo.conversaciones.guardarHistorialApi(sesionId, id, historial, "v1");
       const guardada = await repo.conversaciones.obtener(sesionId, id);
       expect(JSON.stringify(guardada.historialApi)).toBe(JSON.stringify(historial));
     });
@@ -131,7 +134,7 @@ if (!url || !llave) {
       await crearSesion(nueva);
       const dental = obtenerPerfil("dental");
       const deVieja = await repo.conversaciones.obtenerOCrear(vieja, dental.id);
-      await repo.conversaciones.agregarMensaje(deVieja.id, { rol: "cliente", texto: "Hola", creadoEn: new Date().toISOString() });
+      await repo.conversaciones.agregarMensaje(vieja, deVieja.id, { rol: "cliente", texto: "Hola", creadoEn: new Date().toISOString() });
       await repo.conversaciones.obtenerOCrear(nueva, dental.id);
 
       const { error } = await cliente.rpc("limpiar_sesiones_viejas");

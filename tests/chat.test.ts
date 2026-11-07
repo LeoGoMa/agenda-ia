@@ -422,11 +422,11 @@ describe("manejarMensaje", () => {
   });
 
   it("si cambió el prompt o las herramientas arranca un historial nuevo y conserva los mensajes", async () => {
-    const { repo, enviar, responder, conversacion } = preparar();
+    const { repo, enviar, responder, conversacion, sesionId } = preparar();
     await enviar("Hola");
     const antes = await conversacion();
     // Así queda una conversación guardada antes de un despliegue que cambió el perfil o una herramienta.
-    await repo.conversaciones.guardarHistorialApi(antes.id, antes.historialApi, "version-anterior");
+    await repo.conversaciones.guardarHistorialApi(sesionId, antes.id, antes.historialApi, "version-anterior");
 
     await enviar("¿Siguen ahí?");
     expect(responder.mock.calls[1][0].historialApi).toEqual([]);
@@ -445,14 +445,14 @@ describe("manejarMensaje", () => {
   });
 
   it("con un historial de más de 120 000 caracteres no se llama al bot ni se gastan los contadores", async () => {
-    const { repo, enviar, responder, conversacion } = preparar({ limites: { sesionPorHora: 3 } });
+    const { repo, enviar, responder, conversacion, sesionId } = preparar({ limites: { sesionPorHora: 3 } });
     await enviar("Hola"); // sesión: 1 de 3
     const { id, versionPrompt } = await conversacion();
     // Un historial que, serializado, mide exactamente `largo` caracteres.
     const vacio = JSON.stringify([{ role: "user", content: "" }]).length;
     const historialDe = (largo: number) => [{ role: "user", content: "a".repeat(largo - vacio) }];
 
-    await repo.conversaciones.guardarHistorialApi(id, historialDe(120_001), versionPrompt);
+    await repo.conversaciones.guardarHistorialApi(sesionId, id, historialDe(120_001), versionPrompt);
     // Si estos dos 429 gastaran contadores, la sesión llegaría a 3 y el siguiente 200 sería un 429.
     for (let i = 0; i < 2; i++) {
       expect(await enviar("¿Siguen ahí?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
@@ -462,12 +462,12 @@ describe("manejarMensaje", () => {
     expect(rechazada.mensajes).toHaveLength(2); // el mensaje no se guarda
     expect(rechazada.historialApi).toEqual(historialDe(120_001)); // y el historial no se recorta
 
-    await repo.conversaciones.guardarHistorialApi(id, historialDe(120_000), versionPrompt);
+    await repo.conversaciones.guardarHistorialApi(sesionId, id, historialDe(120_000), versionPrompt);
     expect((await enviar("¿Siguen ahí?")).estado).toBe(200); // sesión: 2 de 3
     expect(responder).toHaveBeenCalledTimes(2);
 
     // Cuenta lo que se mandaría: un historial de otra versión del prompt no se reenvía.
-    await repo.conversaciones.guardarHistorialApi(id, historialDe(120_001), "version-anterior");
+    await repo.conversaciones.guardarHistorialApi(sesionId, id, historialDe(120_001), "version-anterior");
     expect((await enviar("¿Y ahora?")).estado).toBe(200); // sesión: 3 de 3
     expect(responder.mock.calls[2][0].historialApi).toEqual([]);
   });

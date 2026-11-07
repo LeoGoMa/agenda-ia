@@ -80,8 +80,8 @@ export function crearRepoSupabase(cliente: SupabaseClient): Repositorio {
   const conversaciones = () =>
     cliente.from("conversaciones").select(CONVERSACION).order("id", { referencedTable: "mensajes", ascending: true });
 
-  /** Cambia la conversación que cumple el filtro; si no hay ninguna, lanza `DATOS_INVALIDOS`. */
-  const cambiarConversacion = async (filtro: { id: string; sesion_id?: string }, cambios: Record<string, unknown>) => {
+  /** Cambia la conversación con ese id y esa sesión; si no hay ninguna, lanza `DATOS_INVALIDOS`. */
+  const cambiarConversacion = async (filtro: { id: string; sesion_id: string }, cambios: Record<string, unknown>) => {
     if (!Object.values(filtro).every((v) => UUID.test(v))) throw conversacionInexistente(filtro.id);
     const { data, error } = await cliente.from("conversaciones").update(cambios).match(filtro).select("id");
     if (error) throw fallo(error);
@@ -166,8 +166,12 @@ export function crearRepoSupabase(cliente: SupabaseClient): Repositorio {
         return aConversacion(data as FilaConversacion);
       },
 
-      async agregarMensaje(conversacionId, m) {
-        if (!UUID.test(conversacionId)) throw conversacionInexistente(conversacionId);
+      async agregarMensaje(sesionId, conversacionId, m) {
+        if (!UUID.test(sesionId) || !UUID.test(conversacionId)) throw conversacionInexistente(conversacionId);
+        // `mensajes` no lleva la sesión: antes se confirma que la conversación es de ella (nunca cambia de sesión).
+        const deLaSesion = await cliente.from("conversaciones").select("id").eq("id", conversacionId).eq("sesion_id", sesionId).maybeSingle();
+        if (deLaSesion.error) throw fallo(deLaSesion.error);
+        if (!deLaSesion.data) throw conversacionInexistente(conversacionId);
         // El trigger `mensajes_contar` suma a mensajes_visitante en la misma transacción.
         const { error } = await cliente
           .from("mensajes")
@@ -176,8 +180,8 @@ export function crearRepoSupabase(cliente: SupabaseClient): Repositorio {
         if (error) throw fallo(error);
       },
 
-      async guardarHistorialApi(conversacionId, historial, versionPrompt) {
-        await cambiarConversacion({ id: conversacionId }, { historial_api: historial, version_prompt: versionPrompt });
+      async guardarHistorialApi(sesionId, conversacionId, historial, versionPrompt) {
+        await cambiarConversacion({ id: conversacionId, sesion_id: sesionId }, { historial_api: historial, version_prompt: versionPrompt });
       },
 
       async cambiarModo(sesionId, conversacionId, modo) {

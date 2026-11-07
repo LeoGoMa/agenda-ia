@@ -24,9 +24,9 @@ export function crearRepoMemoria(): Repositorio {
     }
   };
 
-  const conversacion = (id: string, sesionId?: string) => {
-    const c = conversaciones.find((c) => c.id === id);
-    if (!c || (sesionId !== undefined && c.sesionId !== sesionId)) {
+  const conversacion = (id: string, sesionId: string) => {
+    const c = conversaciones.find((c) => c.id === id && c.sesionId === sesionId);
+    if (!c) {
       throw new ErrorDominio("DATOS_INVALIDOS", `No existe la conversación «${id}»`);
     }
     return c;
@@ -93,14 +93,14 @@ export function crearRepoMemoria(): Repositorio {
         return structuredClone(conversacion(conversacionId, sesionId));
       },
 
-      async agregarMensaje(conversacionId, m) {
-        const c = conversacion(conversacionId);
+      async agregarMensaje(sesionId, conversacionId, m) {
+        const c = conversacion(conversacionId, sesionId);
         c.mensajes.push(structuredClone(m));
         if (m.rol === "cliente") c.mensajesVisitante++;
       },
 
-      async guardarHistorialApi(conversacionId, historial, versionPrompt) {
-        const c = conversacion(conversacionId);
+      async guardarHistorialApi(sesionId, conversacionId, historial, versionPrompt) {
+        const c = conversacion(conversacionId, sesionId);
         c.historialApi = structuredClone(historial);
         c.versionPrompt = versionPrompt;
       },

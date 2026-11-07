@@ -312,11 +312,11 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
       const { repo, sesionId } = preparar();
       const { id } = await repo.conversaciones.obtenerOCrear(sesionId, dental.id);
       const mensaje = (rol: MensajeVisible["rol"], texto: string) => ({ rol, texto, creadoEn: ahora.toISOString() });
-      await repo.conversaciones.agregarMensaje(id, mensaje("cliente", "Hola"));
-      await repo.conversaciones.agregarMensaje(id, mensaje("bot", "¿En qué le ayudo?"));
-      await repo.conversaciones.agregarMensaje(id, mensaje("cliente", "Quiero una limpieza"));
-      await repo.conversaciones.guardarHistorialApi(id, [{ role: "user", content: "viejo" }], "version-vieja");
-      await repo.conversaciones.guardarHistorialApi(id, [{ role: "user", content: "Hola" }], "version-nueva");
+      await repo.conversaciones.agregarMensaje(sesionId, id, mensaje("cliente", "Hola"));
+      await repo.conversaciones.agregarMensaje(sesionId, id, mensaje("bot", "¿En qué le ayudo?"));
+      await repo.conversaciones.agregarMensaje(sesionId, id, mensaje("cliente", "Quiero una limpieza"));
+      await repo.conversaciones.guardarHistorialApi(sesionId, id, [{ role: "user", content: "viejo" }], "version-vieja");
+      await repo.conversaciones.guardarHistorialApi(sesionId, id, [{ role: "user", content: "Hola" }], "version-nueva");
 
       const guardada = await repo.conversaciones.obtenerOCrear(sesionId, dental.id);
       expect(guardada.mensajes.map((m) => [m.rol, m.texto])).toEqual([
@@ -327,9 +327,24 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
       expect(guardada.mensajesVisitante).toBe(2);
       expect(guardada.historialApi).toEqual([{ role: "user", content: "Hola" }]);
       expect(guardada.versionPrompt).toBe("version-nueva");
-      expect(await codigoDe(repo.conversaciones.agregarMensaje(crypto.randomUUID(), mensaje("cliente", "x")))).toBe(
+      expect(await codigoDe(repo.conversaciones.agregarMensaje(sesionId, crypto.randomUUID(), mensaje("cliente", "x")))).toBe(
         "DATOS_INVALIDOS",
       );
+      expect(await codigoDe(repo.conversaciones.guardarHistorialApi(sesionId, crypto.randomUUID(), [], null))).toBe("DATOS_INVALIDOS");
+    });
+
+    it("agregarMensaje y guardarHistorialApi con otra sesión lanzan DATOS_INVALIDOS y no tocan la conversación", async () => {
+      const { repo, sesionId } = preparar();
+      const conversacion = await repo.conversaciones.obtenerOCrear(sesionId, dental.id);
+      const otra = crypto.randomUUID();
+      // La otra sesión también tiene su conversación: el filtro es por sesión, no por existencia.
+      await repo.conversaciones.obtenerOCrear(otra, dental.id);
+      const mensaje = { rol: "cliente" as const, texto: "Soy otra sesión", creadoEn: ahora.toISOString() };
+      expect(await codigoDe(repo.conversaciones.agregarMensaje(otra, conversacion.id, mensaje))).toBe("DATOS_INVALIDOS");
+      expect(await codigoDe(repo.conversaciones.guardarHistorialApi(otra, conversacion.id, [{ role: "user", content: "x" }], "v"))).toBe(
+        "DATOS_INVALIDOS",
+      );
+      expect(await repo.conversaciones.obtener(sesionId, conversacion.id)).toEqual(conversacion);
     });
   });
 }
