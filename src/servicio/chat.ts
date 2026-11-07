@@ -42,9 +42,15 @@ export interface RespuestaChat {
 
 export type RespuestaPanel = { estado: 200 } | { estado: 400 | 429; respuesta: string };
 
-/** El texto sin espacios a los lados, o null si queda vacío o pasa de 1000 caracteres (un emoji cuenta como uno). */
+/** NUL y los demás controles C0 salvo \t y \n: Postgres no guarda NUL en `text` y los otros no salen de un teclado. */
+const CONTROL_C0 = /[\u0000-\u0008\u000b-\u001f]/;
+
+/**
+ * El texto sin espacios a los lados, o null si queda vacío, pasa de 1000 caracteres (un emoji cuenta como uno)
+ * o trae un carácter de control. El control se busca antes de recortar: también se rechaza en las orillas.
+ */
 function textoValido(texto: unknown): string | null {
-  const limpio = typeof texto === "string" ? texto.trim() : "";
+  const limpio = typeof texto === "string" && !CONTROL_C0.test(texto) ? texto.trim() : "";
   const largo = [...limpio].length;
   return largo >= 1 && largo <= MAX_CARACTERES ? limpio : null;
 }

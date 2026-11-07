@@ -260,6 +260,25 @@ describe("manejarMensaje", () => {
     expect((await enviar("🦷".repeat(1000))).estado).toBe(200);
   });
 
+  it("un texto con NUL u otro carácter de control C0 da 400, salvo \\n y \\t (chat y panel)", async () => {
+    const { repo, enviar, panel, responder, conversacion, sesionId } = preparar();
+    // Incluye controles en las orillas, que trim() quitaría (\v, \r): se rechazan igual.
+    const malos = ["Hola\u0000", "\u0000", "a\u0001b", "Hola \u001b[31m", "línea\r\notra", "\u000bHola", "Hola\u001f"];
+    for (const texto of malos) {
+      expect(await enviar(texto), JSON.stringify(texto)).toEqual({ estado: 400, respuesta: TEXTOS.usted.invalido, modo: "bot" });
+    }
+    expect(responder).not.toHaveBeenCalled();
+    expect(await repo.conversaciones.listar(sesionId, "dental")).toEqual([]);
+
+    expect(await enviar("Hola\n\tquiero una cita")).toMatchObject({ estado: 200, modo: "bot" });
+    const antes = await conversacion();
+    for (const texto of malos) {
+      expect(await panel(texto), JSON.stringify(texto)).toEqual({ estado: 400, respuesta: TEXTOS.usted.invalido });
+    }
+    expect(await conversacion()).toEqual(antes);
+    expect(await panel("Con gusto.\n\tRecepción")).toEqual({ estado: 200 });
+  });
+
   it("un negocio inexistente lanza DATOS_INVALIDOS sin crear conversación ni llamar al bot", async () => {
     const { deps, responder, sesionId } = preparar();
     await expect(manejarMensaje(deps, { sesionId, ip: IP, negocioId: "no-existe", texto: "Hola" })).rejects.toMatchObject({
