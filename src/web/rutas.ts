@@ -37,8 +37,8 @@ export async function sinFugas(ruta: string, manejar: () => Promise<Response>): 
 
 /**
  * Para las rutas del chat y el panel. Sin cookie de sesión válida responde 401. Si no, crea la fila de la sesión
- * y llama a `manejar` con las dependencias. La cookie se lee primero y fuera del try: en `next build`, leer la
- * petición es lo que deja la ruta como dinámica, y esa señal de Next no se debe atrapar.
+ * y llama a `manejar` con las dependencias. La cookie se lee fuera del try: en `next build`, leer la petición
+ * lanza la señal con que Next deja la ruta como dinámica; atrapada, saldría como un falso error inesperado.
  */
 export async function conSesion(
   peticion: Request,

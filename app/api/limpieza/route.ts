@@ -9,8 +9,6 @@ const resumen = (texto: string) => createHash("sha256").update(texto).digest();
  * `Authorization: Bearer <CRON_SECRET>`. Sin CRON_SECRET configurado responde 401 a todo.
  */
 export async function GET(peticion: Request) {
-  // La petición se lee primero: en `next build` eso deja la ruta como dinámica. Si se decidiera antes solo
-  // con el entorno (sin CRON_SECRET en el build), quedaría guardado un 401 estático.
   const autorizacion = peticion.headers.get("authorization") ?? "";
   const secreto = process.env.CRON_SECRET;
   // Hashes del mismo largo comparados en tiempo constante: la respuesta no revela cuánto del secreto coincide.
