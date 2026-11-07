@@ -55,9 +55,13 @@ interface Opciones {
   encabezados?: Record<string, string>;
 }
 
-/** Una petición de Web como la que recibe el handler; el cuerpo de texto va tal cual (JSON roto a propósito). */
+/**
+ * Una petición de Web como la que recibe el handler; el cuerpo de texto va tal cual (JSON roto a propósito).
+ * Con cuerpo lleva `content-type: application/json`, como la interfaz, salvo que `encabezados` diga otro.
+ */
 function peticion(ruta: string, { sesion, cuerpo, ip = IP, encabezados = {} }: Opciones = {}) {
-  const headers: Record<string, string> = { "x-forwarded-for": ip, ...encabezados };
+  const tipo: Record<string, string> = cuerpo === undefined ? {} : { "content-type": "application/json" };
+  const headers: Record<string, string> = { "x-forwarded-for": ip, ...tipo, ...encabezados };
   if (sesion !== undefined) headers.cookie = `otra=1; agenda_sesion=${sesion}; tema=oscuro`;
   if (cuerpo === undefined) return new Request(`http://localhost${ruta}`, { headers });
   const body = typeof cuerpo === "string" ? cuerpo : JSON.stringify(cuerpo);
@@ -446,6 +450,49 @@ describe("rutas del chat y el panel", () => {
     expect(await ana.responder(conv.id, " ")).toEqual({ estado: 400, cuerpo: { respuesta: TEXTOS.invalido } });
   });
 
+  it("un POST sin Content-Type: application/json da 415 sin crear la sesión ni tocar el repositorio", async () => {
+    const deps = armarDeps({ NODE_ENV: "test" });
+    const asegurarSesion = vi.spyOn(deps, "asegurarSesion");
+    ponerDeps(deps);
+    const { sesion } = visitante();
+    const rutas: [string, (r: Request) => Promise<Response>, unknown][] = [
+      ["/api/chat", chat, { negocioId: "dental", texto: "Hola" }],
+      ["/api/panel/mensaje", panelMensaje, { conversacionId: crypto.randomUUID(), texto: "Hola" }],
+      ["/api/panel/modo", panelModo, { conversacionId: crypto.randomUUID(), modo: "humano" }],
+    ];
+    for (const [ruta, manejar, cuerpo] of rutas) {
+      for (const tipo of ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", "application/jsonp"]) {
+        const respuesta = await manejar(peticion(ruta, { sesion, cuerpo, encabezados: { "content-type": tipo } }));
+        expect(await leer(respuesta), `${ruta} ${tipo}`).toEqual({ estado: 415, cuerpo: { error: TEXTOS.solicitudInvalida } });
+      }
+      // Sin Content-Type: un cuerpo binario no lo pone.
+      const sinTipo = new Request(`http://localhost${ruta}`, {
+        method: "POST",
+        headers: { cookie: `agenda_sesion=${sesion}`, "x-forwarded-for": IP },
+        body: new TextEncoder().encode(JSON.stringify(cuerpo)),
+      });
+      expect(await leer(await manejar(sinTipo)), `${ruta} sin tipo`).toEqual({ estado: 415, cuerpo: { error: TEXTOS.solicitudInvalida } });
+    }
+    expect(asegurarSesion).not.toHaveBeenCalled();
+    // Con charset o en mayúsculas sí pasa.
+    for (const tipo of ["application/json; charset=utf-8", "Application/JSON"]) {
+      const respuesta = await chat(peticion("/api/chat", { sesion, cuerpo: { negocioId: "dental", texto: "Hola" }, encabezados: { "content-type": tipo } }));
+      expect(respuesta.status, tipo).toBe(200);
+    }
+  });
+
+  it("un texto de más de 4000 caracteres se corta en el esquema de la ruta, antes del servicio", async () => {
+    const ana = visitante();
+    await ana.escribir("Hola");
+    const [conv] = (await ana.verPanel()).cuerpo.conversaciones;
+    const enorme = "a".repeat(4001);
+    expect(await ana.escribir(enorme)).toEqual({ estado: 400, cuerpo: { error: TEXTOS.solicitudInvalida } });
+    expect(await ana.responder(conv.id, enorme)).toEqual({ estado: 400, cuerpo: { error: TEXTOS.solicitudInvalida } });
+    // Hasta 4000 llega al servicio, que da su propio 400 con el trato del negocio (su tope es 1000).
+    expect(await ana.escribir("a".repeat(4000))).toEqual({ estado: 400, cuerpo: { respuesta: TEXTOS.invalido, modo: "bot" } });
+    expect(await ana.responder(conv.id, "a".repeat(4000))).toEqual({ estado: 400, cuerpo: { respuesta: TEXTOS.invalido } });
+  });
+
   it("chat devuelve 429 con mensaje amable al pasar el límite", async () => {
     ponerDeps(armarDeps({ NODE_ENV: "test", AGENDA_LIMITE_SESION_HORA: "2" }));
     const ana = visitante();
@@ -504,7 +551,7 @@ describe("rutas del chat y el panel", () => {
     ponerDeps({
       ...base,
       responder: async () => {
-        throw new Error("detalle interno: conexión rechazada con sk-ant-llave-falsa", { cause: new Error("causa interna") });
+        throw new Error("detalle interno: conexión rechazada", { cause: new Error("causa interna con texto-privado-del-visitante") });
       },
     });
     const registro = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -515,6 +562,31 @@ describe("rutas del chat y el panel", () => {
     expect(registrado(registro)).toContain("POST /api/chat");
     expect(registrado(registro)).toContain("detalle interno"); // el servidor sí sabe qué pasó…
     expect(registrado(registro)).not.toContain(texto); // …pero no guarda lo que escribió el visitante
+    expect(registrado(registro)).not.toContain("causa interna"); // ni la causa completa
+  });
+
+  it("de un error de Postgres el registro lleva nombre, código y mensaje; nunca details, hint ni la pila", async () => {
+    const base = armarDeps({ NODE_ENV: "test" });
+    const dePostgres = {
+      code: "23505",
+      message: "duplicate key value violates unique constraint",
+      details: "Key (cliente_telefono)=(5500000042) already exists.",
+      hint: "pista-interna",
+    };
+    ponerDeps({
+      ...base,
+      repo: {
+        ...base.repo,
+        citas: { ...base.repo.citas, listar: () => Promise.reject(new Error(`Supabase: ${dePostgres.message}`, { cause: dePostgres })) },
+      },
+    });
+    const registro = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await visitante().verPanel()).toEqual({ estado: 500, cuerpo: { error: TEXTOS.errorInterno } });
+    const linea = registrado(registro);
+    for (const esperado of ["GET /api/panel", "Error", "23505", "Supabase: duplicate key value violates unique constraint"]) {
+      expect(linea).toContain(esperado);
+    }
+    for (const prohibido of ["5500000042", "pista-interna", "rutas.test.ts"]) expect(linea).not.toContain(prohibido);
   });
 
   it("las dependencias se arman en la primera petición: en producción sin variables, 500 genérico y el registro dice qué falta", async () => {

@@ -2,7 +2,8 @@ import { z } from "zod";
 import { mensajeHumano } from "@/src/servicio/chat";
 import { conSesion, cuerpoDe, ipDe, solicitudInvalida } from "@/src/web/rutas";
 
-const esquema = z.object({ conversacionId: z.string(), texto: z.string() });
+// El servicio valida 1000 caracteres; aquí se corta antes un cuerpo enorme.
+const esquema = z.object({ conversacionId: z.string(), texto: z.string().max(4000) });
 
 /** Una persona del negocio contesta desde el panel. 200 `{ ok: true }`; 400 o 429 `{ respuesta }`. */
 export async function POST(peticion: Request) {

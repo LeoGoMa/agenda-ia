@@ -2,7 +2,8 @@ import { z } from "zod";
 import { manejarMensaje } from "@/src/servicio/chat";
 import { conSesion, cuerpoDe, ipDe, solicitudInvalida } from "@/src/web/rutas";
 
-const esquema = z.object({ negocioId: z.string(), texto: z.string() });
+// El servicio valida 1000 caracteres; aquí se corta antes un cuerpo enorme.
+const esquema = z.object({ negocioId: z.string(), texto: z.string().max(4000) });
 
 /** Segundos: un mensaje puede llevar hasta 6 vueltas de herramientas con Claude. */
 export const maxDuration = 60;
