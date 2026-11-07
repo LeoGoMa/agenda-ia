@@ -3,8 +3,7 @@ import { MARCA_DEMO } from "@/src/bot/responderDev";
 import { crearRefresco } from "@/src/ui/api";
 import {
   agruparPorDia,
-  contarCitas,
-  ETIQUETA_ESTADO,
+  contar,
   ETIQUETA_MODO,
   etiquetaHora,
   formatoTelefono,
@@ -152,16 +151,18 @@ describe("crearRefresco (el sondeo del panel)", () => {
   });
 });
 
-describe("conteos y estados", () => {
-  it("cuenta citas en singular y plural", () => {
-    expect(contarCitas(0)).toBe("0 citas");
-    expect(contarCitas(1)).toBe("1 cita");
-    expect(contarCitas(27)).toBe("27 citas");
-    expect(contarCitas(1284)).toBe("1,284 citas");
+describe("conteos y modos", () => {
+  it("citas y mensajes se cuentan con la misma regla de singular y plural, y con separador de miles", () => {
+    expect(contar(0, "cita", "citas")).toBe("0 citas");
+    expect(contar(1, "cita", "citas")).toBe("1 cita");
+    expect(contar(27, "cita", "citas")).toBe("27 citas");
+    expect(contar(1284, "cita", "citas")).toBe("1,284 citas");
+    expect(contar(1, "mensaje", "mensajes")).toBe("1 mensaje");
+    expect(contar(2, "mensaje", "mensajes")).toBe("2 mensajes");
+    expect(contar(1000, "mensaje", "mensajes")).toBe("1,000 mensajes");
   });
 
-  it("nombra el modo de la conversación y el estado de la cita", () => {
+  it("nombra el modo de la conversación", () => {
     expect(ETIQUETA_MODO).toEqual({ bot: "Bot", humano: "Persona" });
-    expect(ETIQUETA_ESTADO).toEqual({ confirmada: "Confirmada", cancelada: "Cancelada" });
   });
 });

@@ -4,7 +4,7 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import type { MensajeVisible } from "../repo/tipos";
 import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { EnlacesForge } from "./AvisoFicticio";
-import { agruparPorDia, contarCitas, ETIQUETA_ESTADO, ETIQUETA_MODO, etiquetaHora, formatoTelefono, separarMarcaDemo } from "./formato";
+import { agruparPorDia, contar, ETIQUETA_MODO, etiquetaHora, formatoTelefono, separarMarcaDemo } from "./formato";
 
 type ConversacionVista = DatosPanel["conversaciones"][number];
 const AUTOR: Record<MensajeVisible["rol"], string> = { cliente: "Cliente", bot: "Bot", humano: "Tú (persona)", sistema: "Aviso" };
@@ -89,9 +89,7 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
           </time>
         </p>
       ) : null}
-      <p className="mt-1 text-xs text-tenue">
-        {mensajes.length} {mensajes.length === 1 ? "mensaje" : "mensajes"}
-      </p>
+      <p className="mt-1 text-xs text-tenue">{contar(mensajes.length, "mensaje", "mensajes")}</p>
 
       {enHumano ? (
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -202,7 +200,7 @@ export function Panel({
                 <li key={fecha} className="rounded-2xl border border-borde bg-white shadow-sm">
                   <h4 className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-borde px-4 py-2.5 font-semibold">
                     {titulo}
-                    <span className="text-sm font-normal text-tenue">{contarCitas(citas.length)}</span>
+                    <span className="text-sm font-normal text-tenue">{contar(citas.length, "cita", "citas")}</span>
                   </h4>
                   <ul className="divide-y divide-borde">
                     {citas.map((c) => {
@@ -231,7 +229,7 @@ export function Panel({
                           {cancelada ? (
                             <p className="col-start-2 sm:col-start-auto sm:text-right">
                               <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-stone-700">
-                                {ETIQUETA_ESTADO.cancelada}
+                                Cancelada
                               </span>
                             </p>
                           ) : null}

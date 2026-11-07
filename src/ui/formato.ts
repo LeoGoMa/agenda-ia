@@ -1,6 +1,5 @@
 import { MARCA_DEMO } from "../bot/responderDev";
 import { partesLocales } from "../dominio/tiempo";
-import type { Cita } from "../dominio/tipos";
 import type { Conversacion } from "../repo/tipos";
 
 const DIA = 24 * 60 * 60_000;
@@ -10,7 +9,6 @@ const PLURAL = new Intl.PluralRules("es-MX");
 const NUMERO = new Intl.NumberFormat("es-MX");
 
 export const ETIQUETA_MODO: Record<Conversacion["modo"], string> = { bot: "Bot", humano: "Persona" };
-export const ETIQUETA_ESTADO: Record<Cita["estado"], string> = { confirmada: "Confirmada", cancelada: "Cancelada" };
 
 /** "HH:MM" (24 horas) de un instante ISO, en la hora local de `zona`. */
 export const etiquetaHora = (iso: string, zona: string) => partesLocales(new Date(iso), zona).hora;
@@ -57,4 +55,6 @@ export function textoDeAviso(cuerpo: unknown): string {
   return GENERICO;
 }
 
-export const contarCitas = (n: number) => `${NUMERO.format(n)} ${PLURAL.select(n) === "one" ? "cita" : "citas"}`;
+/** «1 cita», «27 citas», «1,284 mensajes»: una sola regla de singular y plural para todo lo que se cuenta. */
+export const contar = (n: number, singular: string, plural: string) =>
+  `${NUMERO.format(n)} ${PLURAL.select(n) === "one" ? singular : plural}`;
