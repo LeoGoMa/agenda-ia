@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Paleta propia: verdes azulados y fondos cálidos de chat de mensajería, sin colores ni recursos de otra marca.
+/* Paleta propia, con aspecto tipo app de mensajería: sin logo, nombre ni recursos de WhatsApp/Meta.
    Contrastes AA revisados: texto tenue sobre fondo, chat y burbujas ≥ 6:1; blanco sobre marca 5.5:1. */
 @theme {
   --color-fondo: #f5f3ef;
