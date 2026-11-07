@@ -26,9 +26,25 @@ export interface ConfigLimites {
   salIp: string;
 }
 
+/**
+ * Lo que identifica a un cliente en los contadores. Una IPv6 se agrupa por su prefijo /64, que suele ser de una
+ * sola conexión: si no, quien tiene un /64 estrena dirección en cada petición y nunca llega a un límite.
+ * Una IPv4 (también escrita como ::ffff:a.b.c.d) o cualquier otro texto queda tal cual.
+ */
+function clienteDe(ip: string): string {
+  const mapeada = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapeada) return mapeada[1];
+  if (!ip.includes(":") || ip.includes(".")) return ip;
+  const [cabeza, cola] = ip.split("%")[0].split("::");
+  const grupos = (parte = "") => (parte ? parte.split(":") : []);
+  const ceros = Array(Math.max(0, 8 - grupos(cabeza).length - grupos(cola).length)).fill("0");
+  const completa = cola === undefined ? grupos(cabeza) : [...grupos(cabeza), ...ceros, ...grupos(cola)];
+  return `${completa.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":")}::/64`;
+}
+
 /** SHA-256 de sal + IP, en hexadecimal. La IP es dato personal; con sal secreta, el hash no se revierte probando todas las IPv4. */
 export function hashIp(ip: string, sal: string): string {
-  return createHash("sha256").update(sal + ip).digest("hex");
+  return createHash("sha256").update(sal + clienteDe(ip)).digest("hex");
 }
 
 export type Verificacion =

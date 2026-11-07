@@ -101,8 +101,9 @@ if (!url || !llave) {
       const sesionId = crypto.randomUUID();
       sesionesCreadas.add(sesionId);
       const listar = () => deps.repo.citas.listar(sesionId, "dental", "2000-01-01T00:00:00.000Z", "9999-12-31T00:00:00.000Z");
-      // IP de documentación al azar: el contador de sesiones nuevas de la base no se acumula entre corridas.
-      const ip = `2001:db8::${crypto.randomUUID().slice(0, 4)}`;
+      // IP de documentación en un /64 al azar (el limitador agrupa las IPv6 por /64): el contador de sesiones
+      // nuevas de la base no se acumula entre corridas.
+      const ip = `2001:db8:${crypto.randomUUID().slice(0, 4)}::1`;
       expect(await deps.asegurarSesion(sesionId, ip)).toBe(true);
       const primera = await listar();
       expect(primera.length).toBeGreaterThanOrEqual(3);

@@ -143,6 +143,24 @@ describe("límites", () => {
     expect(claves.join(" ")).not.toContain(IP);
   });
 
+  it("una IPv6 cuenta por su prefijo /64: quien cambia la segunda mitad de su dirección sigue en la misma clave", () => {
+    const sal = "sal-de-prueba";
+    // Calculado aparte: printf '%s' 'sal-de-prueba2001:db8:abcd:12::/64' | sha256sum
+    const esperado = "039c20ac6d1a1870882aec8ffe013837fcf75af1e39b023df0b40e4cf270cfb2";
+    const mismo64 = ["2001:db8:abcd:12::1", "2001:0DB8:ABCD:0012:ffff:eeee:dddd:cccc", "2001:db8:abcd:12:0:0:0:7", "2001:db8:abcd:12::9%eth0"];
+    for (const ip of mismo64) expect(hashIp(ip, sal), ip).toBe(hashIp(mismo64[0], sal));
+    expect(hashIp("2001:db8:abcd:12::1", sal)).toBe(esperado);
+    // Otro /64 es otra clave, también cuando el «::» cae dentro del prefijo.
+    expect(hashIp("2001:db8:abcd:13::1", sal)).not.toBe(esperado);
+    expect(hashIp("2001:db8::1", sal)).toBe(hashIp("2001:db8:0:0:ffff::1", sal));
+    expect(hashIp("2001:db8::1", sal)).not.toBe(hashIp("2001:db8:0:1::1", sal));
+    expect(hashIp("::1", sal)).toBe(hashIp("0:0:0:0::2", sal));
+    // Las IPv4 quedan igual que antes; una IPv4 escrita como IPv6 (::ffff:a.b.c.d) cuenta como su IPv4.
+    expect(hashIp(IP, sal)).toBe("874df0b670b85b1e964ac294dc596618f8cfc41b80b6a6c5fb84b6d571d3753f");
+    expect(hashIp(`::ffff:${IP}`, sal)).toBe(hashIp(IP, sal));
+    expect(hashIp("203.0.113.8", sal)).not.toBe(hashIp(IP, sal));
+  });
+
   it("el limitador da el motivo de cada límite", async () => {
     const limitador = crearLimitador(almacenMemoria(), POR_DEFECTO);
     const verificar = (cambios: Partial<Parameters<typeof limitador.verificar>[0]>) =>
