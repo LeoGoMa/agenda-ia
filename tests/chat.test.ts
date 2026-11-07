@@ -1,13 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { crearRepoMemoria } from "@/src/repo/memoria";
 import { devolverAlBot, manejarMensaje, mensajeHumano, type DepsChat, type Responder } from "@/src/servicio/chat";
-import { almacenMemoria, crearLimitador, limitesDesdeEntorno, type ConfigLimites } from "@/src/servicio/limites";
+import { almacenMemoria, crearLimitador, hashIp, limitesDesdeEntorno, type ConfigLimites } from "@/src/servicio/limites";
 
 const ahora = new Date("2026-11-09T15:00:00Z"); // lunes 9:00 en CDMX
 const HORA = 3_600_000;
 const IP = "203.0.113.7"; // rango reservado para documentación
 const MARTES_9 = "2026-11-10T15:00:00.000Z";
-const POR_DEFECTO: ConfigLimites = { sesionPorHora: 20, ipPorHora: 40, mensajesPorConversacion: 30, conversacionesPorDia: 300 };
+const SAL_DESARROLLO = "agenda-ia-sal-solo-desarrollo";
+const POR_DEFECTO: ConfigLimites = {
+  sesionPorHora: 20,
+  ipPorHora: 40,
+  mensajesPorConversacion: 30,
+  conversacionesPorDia: 300,
+  salIp: SAL_DESARROLLO,
+};
 const TEXTOS = {
   usted: {
     invalido: "Escriba un mensaje de 1 a 1000 caracteres.",
@@ -77,10 +84,41 @@ describe("límites", () => {
         AGENDA_MAX_MENSAJES_CONVERSACION: "12",
         AGENDA_TOPE_DIARIO: "50",
       }),
-    ).toEqual({ sesionPorHora: 5, ipPorHora: 8, mensajesPorConversacion: 12, conversacionesPorDia: 50 });
+    ).toEqual({ sesionPorHora: 5, ipPorHora: 8, mensajesPorConversacion: 12, conversacionesPorDia: 50, salIp: SAL_DESARROLLO });
     for (const malo of ["0", "-3", "2.5", "veinte"]) {
       expect(() => limitesDesdeEntorno({ AGENDA_LIMITE_IP_HORA: malo }), malo).toThrow("AGENDA_LIMITE_IP_HORA");
     }
+  });
+
+  it("la sal de la IP viene de AGENDA_SAL_IP; sin ella, en producción no arranca", () => {
+    expect(limitesDesdeEntorno({ AGENDA_SAL_IP: "sal-secreta" }).salIp).toBe("sal-secreta");
+    expect(limitesDesdeEntorno({ NODE_ENV: "production", AGENDA_SAL_IP: "sal-secreta" }).salIp).toBe("sal-secreta");
+    // En desarrollo y pruebas, sin sal (o vacía, como en .env.example) se usa la fija de desarrollo.
+    expect(limitesDesdeEntorno({ NODE_ENV: "development", AGENDA_SAL_IP: "" }).salIp).toBe(SAL_DESARROLLO);
+    expect(limitesDesdeEntorno({ NODE_ENV: "test" }).salIp).toBe(SAL_DESARROLLO);
+    for (const env of [{ NODE_ENV: "production" }, { NODE_ENV: "production", AGENDA_SAL_IP: "" }]) {
+      expect(() => limitesDesdeEntorno(env), JSON.stringify(env)).toThrow("Falta AGENDA_SAL_IP");
+    }
+  });
+
+  it("la clave de IP lleva el SHA-256 de sal + IP en hexadecimal, nunca la IP en claro", async () => {
+    // Calculado aparte: printf '%s' 'sal-de-prueba203.0.113.7' | sha256sum
+    const esperado = "874df0b670b85b1e964ac294dc596618f8cfc41b80b6a6c5fb84b6d571d3753f";
+    expect(hashIp(IP, "sal-de-prueba")).toBe(esperado);
+    expect(hashIp(IP, "otra-sal")).not.toBe(esperado);
+    expect(hashIp("203.0.113.8", "sal-de-prueba")).not.toBe(esperado);
+
+    const claves: string[] = [];
+    const almacen = {
+      incrementar: async (clave: string) => {
+        claves.push(clave);
+        return 1;
+      },
+    };
+    const limitador = crearLimitador(almacen, { ...POR_DEFECTO, salIp: "sal-de-prueba" });
+    await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0 });
+    expect(claves).toEqual(["sesion:s", `ip:${esperado}`, "conversaciones-nuevas"]);
+    expect(claves.join(" ")).not.toContain(IP);
   });
 
   it("el limitador da el motivo de cada límite", async () => {
