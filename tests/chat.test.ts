@@ -13,6 +13,7 @@ const POR_DEFECTO: ConfigLimites = {
   ipPorHora: 40,
   mensajesPorConversacion: 30,
   conversacionesPorDia: 300,
+  sesionesNuevasIpPorHora: 10,
   salIp: SAL_DESARROLLO,
 };
 const TEXTOS = {
@@ -75,6 +76,7 @@ describe("límites", () => {
       AGENDA_LIMITE_IP_HORA: "",
       AGENDA_MAX_MENSAJES_CONVERSACION: "",
       AGENDA_TOPE_DIARIO: "",
+      AGENDA_LIMITE_SESIONES_IP_HORA: "",
     };
     expect(limitesDesdeEntorno(vacias)).toEqual(POR_DEFECTO);
     expect(
@@ -83,10 +85,19 @@ describe("límites", () => {
         AGENDA_LIMITE_IP_HORA: "8",
         AGENDA_MAX_MENSAJES_CONVERSACION: "12",
         AGENDA_TOPE_DIARIO: "50",
+        AGENDA_LIMITE_SESIONES_IP_HORA: "3",
       }),
-    ).toEqual({ sesionPorHora: 5, ipPorHora: 8, mensajesPorConversacion: 12, conversacionesPorDia: 50, salIp: SAL_DESARROLLO });
+    ).toEqual({
+      sesionPorHora: 5,
+      ipPorHora: 8,
+      mensajesPorConversacion: 12,
+      conversacionesPorDia: 50,
+      sesionesNuevasIpPorHora: 3,
+      salIp: SAL_DESARROLLO,
+    });
     for (const malo of ["0", "-3", "2.5", "veinte"]) {
       expect(() => limitesDesdeEntorno({ AGENDA_LIMITE_IP_HORA: malo }), malo).toThrow("AGENDA_LIMITE_IP_HORA");
+      expect(() => limitesDesdeEntorno({ AGENDA_LIMITE_SESIONES_IP_HORA: malo }), malo).toThrow("AGENDA_LIMITE_SESIONES_IP_HORA");
     }
   });
 
@@ -118,6 +129,8 @@ describe("límites", () => {
     const limitador = crearLimitador(almacen, { ...POR_DEFECTO, salIp: "sal-de-prueba" });
     await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0 });
     expect(claves).toEqual(["sesion:s", `ip:${esperado}`, "conversaciones-nuevas"]);
+    await limitador.sesionNueva(IP);
+    expect(claves.at(-1)).toBe(`sesion-nueva:${esperado}`);
     expect(claves.join(" ")).not.toContain(IP);
   });
 
@@ -143,6 +156,18 @@ describe("límites", () => {
       motivo: "diario",
     });
     expect(await verificar({ sesionId: "d-300", ip: "ip-d-300" })).toEqual({ permitido: true }); // una que ya empezó sigue
+  });
+
+  it("las sesiones nuevas por IP tienen su propio tope por hora", async () => {
+    const limitador = crearLimitador(almacenMemoria(), { ...POR_DEFECTO, sesionesNuevasIpPorHora: 2 });
+    expect(await limitador.sesionNueva(IP)).toBe(true);
+    expect(await limitador.sesionNueva(IP)).toBe(true);
+    expect(await limitador.sesionNueva(IP)).toBe(false);
+    expect(await limitador.sesionNueva("198.51.100.4")).toBe(true); // otra IP
+    // No toca los contadores de mensajes: la IP sigue pudiendo escribir.
+    expect(await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0 })).toEqual({ permitido: true });
+    vi.setSystemTime(ahora.getTime() + HORA); // la hora siguiente vuelve a empezar
+    expect(await limitador.sesionNueva(IP)).toBe(true);
   });
 
   it("un mensaje rechazado por sesión o IP no gasta el tope diario", async () => {

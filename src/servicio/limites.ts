@@ -18,6 +18,8 @@ export interface ConfigLimites {
   mensajesPorConversacion: number;
   /** Conversaciones nuevas al día, entre todos los visitantes. */
   conversacionesPorDia: number;
+  /** Sesiones nuevas por IP y por hora: cada una crea una fila y siembra citas en la base. */
+  sesionesNuevasIpPorHora: number;
   /** Sal del hash de la IP: los contadores nunca guardan la IP en claro. */
   salIp: string;
 }
@@ -47,6 +49,7 @@ export function limitesDesdeEntorno(env: Record<string, string | undefined> = pr
     ipPorHora: leer("AGENDA_LIMITE_IP_HORA", 40),
     mensajesPorConversacion: leer("AGENDA_MAX_MENSAJES_CONVERSACION", 30),
     conversacionesPorDia: leer("AGENDA_TOPE_DIARIO", 300),
+    sesionesNuevasIpPorHora: leer("AGENDA_LIMITE_SESIONES_IP_HORA", 10),
     salIp: env.AGENDA_SAL_IP || SAL_SOLO_DESARROLLO,
   };
 }
@@ -81,6 +84,11 @@ export function crearLimitador(almacen: AlmacenContadores, config: ConfigLimites
         return { permitido: false, motivo: "diario" };
       }
       return { permitido: true };
+    },
+
+    /** Antes de crear (y sembrar) una sesión nueva: cuenta las de la IP en la hora; false si pasa del tope. */
+    async sesionNueva(ip: string): Promise<boolean> {
+      return (await almacen.incrementar(`sesion-nueva:${hashIp(ip, config.salIp)}`, HORA_SEG)) <= config.sesionesNuevasIpPorHora;
     },
   };
 }

@@ -12,9 +12,10 @@ import { sembrarCitas } from "./siembra";
 export interface Deps extends DepsChat {
   /**
    * Crea la fila de `sesiones` si falta (citas y conversaciones la referencian) y, solo la primera vez,
-   * siembra sus citas ficticias para que la agenda se vea ocupada.
+   * siembra sus citas ficticias para que la agenda se vea ocupada. Una sesión nueva antes pasa por el tope de
+   * sesiones nuevas de su IP: si lo pasa, no se crea ni se siembra y devuelve false.
    */
-  asegurarSesion(sesionId: string): Promise<void>;
+  asegurarSesion(sesionId: string, ip: string): Promise<boolean>;
   /** Borra las sesiones de más de 7 días con todo lo suyo y devuelve cuántas borró. */
   limpiar(): Promise<number>;
 }
@@ -22,6 +23,7 @@ export interface Deps extends DepsChat {
 type Entorno = Record<string, string | undefined>;
 type Datos = Pick<Deps, "repo" | "limpiar"> & {
   almacen: AlmacenContadores;
+  existeSesion(id: string): Promise<boolean>;
   /** Crea la fila de `sesiones` si falta; true solo si la creó esta llamada. */
   crearSesion(id: string): Promise<boolean>;
 };
@@ -34,6 +36,11 @@ function armarDatos(env: Entorno, produccion: boolean): Datos {
     return {
       repo: crearRepoSupabase(cliente),
       almacen: almacenSupabase(cliente),
+      async existeSesion(id) {
+        const { data, error } = await cliente.from("sesiones").select("id").eq("id", id).maybeSingle();
+        if (error) throw fallo(error);
+        return data !== null;
+      },
       async crearSesion(id) {
         // Con ignoreDuplicates es un insert ... on conflict do nothing: solo devuelve la fila si la insertó.
         const { data, error } = await cliente.from("sesiones").upsert({ id }, { onConflict: "id", ignoreDuplicates: true }).select("id");
@@ -54,6 +61,7 @@ function armarDatos(env: Entorno, produccion: boolean): Datos {
   return {
     repo: crearRepoMemoria(),
     almacen: almacenMemoria(),
+    existeSesion: async (id) => sesiones.has(id),
     async crearSesion(id) {
       if (sesiones.has(id)) return false;
       sesiones.add(id);
@@ -83,19 +91,24 @@ function armarResponder(env: Entorno, produccion: boolean): Responder {
 export function armarDeps(env: Entorno = process.env): Deps {
   const produccion = env.NODE_ENV === "production";
   const limites = limitesDesdeEntorno(env);
-  const { almacen, crearSesion, ...datos } = armarDatos(env, produccion);
+  const { almacen, existeSesion, crearSesion, ...datos } = armarDatos(env, produccion);
   const responder = armarResponder(env, produccion);
   if (env.NODE_ENV === "development") {
     const repo = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "Supabase" : "memoria";
     console.info(`Agenda IA: datos en ${repo}, responder ${responder === responderDev ? "de demostración sin IA" : "de Claude"}.`);
   }
   const ahora = () => new Date();
+  const limitador = crearLimitador(almacen, limites);
   return {
     ...datos,
-    async asegurarSesion(sesionId) {
+    async asegurarSesion(sesionId, ip) {
+      if (await existeSesion(sesionId)) return true;
+      if (!(await limitador.sesionNueva(ip))) return false;
+      // Dos peticiones a la vez de una sesión nueva cuentan las dos, pero solo la que crea la fila siembra.
       if (await crearSesion(sesionId)) await sembrarCitas(datos.repo, sesionId, ahora());
+      return true;
     },
-    limitador: crearLimitador(almacen, limites),
+    limitador,
     responder,
     ahora,
   };

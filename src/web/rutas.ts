@@ -3,12 +3,13 @@ import { ErrorDominio } from "../dominio/tipos";
 import { obtenerDeps, type Deps } from "../servicio/deps";
 import { sesionDe } from "./sesion";
 
-// Los errores de la petición (400, 401, 500) responden `{ error }`; las respuestas del servicio de chat
-// (200, 400 por texto inválido y 429) traen `respuesta`, con el trato del negocio.
+// Los errores de la petición (400, 401, 500 y el 429 por sesiones nuevas) responden `{ error }`; las respuestas
+// del servicio de chat (200, 400 por texto inválido y 429) traen `respuesta`, con el trato del negocio.
 const TEXTOS = {
   sesionInvalida: "La sesión no es válida o ya expiró. Recarga la página para empezar una nueva.",
   solicitudInvalida: "La solicitud no es válida.",
   errorInterno: "Algo salió mal de nuestro lado. Inténtalo de nuevo en un momento.",
+  limiteSesiones: "Llegaste al límite de la demo por ahora. Si quieres un bot así para tu negocio, escríbele a Forge Studio.",
 };
 
 export const solicitudInvalida = () => Response.json({ error: TEXTOS.solicitudInvalida }, { status: 400 });
@@ -37,9 +38,9 @@ export async function sinFugas(ruta: string, manejar: () => Promise<Response>): 
 
 /**
  * Para las rutas del chat y el panel. Sin cookie de sesión válida responde 401. Si no, crea la fila de la sesión
- * (con sus citas ficticias la primera vez) y llama a `manejar` con las dependencias. La cookie se lee fuera del
- * try: en `next build`, leer la petición
- * lanza la señal con que Next deja la ruta como dinámica; atrapada, saldría como un falso error inesperado.
+ * (con sus citas ficticias la primera vez; 429 si la IP pasó el tope de sesiones nuevas) y llama a `manejar` con
+ * las dependencias. La cookie se lee fuera del try: en `next build`, leer la petición lanza la señal con que Next
+ * deja la ruta como dinámica; atrapada, saldría como un falso error inesperado.
  */
 export async function conSesion(
   peticion: Request,
@@ -50,7 +51,9 @@ export async function conSesion(
   if (!sesionId) return Response.json({ error: TEXTOS.sesionInvalida }, { status: 401 });
   return sinFugas(ruta, async () => {
     const deps = obtenerDeps();
-    await deps.asegurarSesion(sesionId);
+    if (!(await deps.asegurarSesion(sesionId, ipDe(peticion)))) {
+      return Response.json({ error: TEXTOS.limiteSesiones }, { status: 429 });
+    }
     return manejar(sesionId, deps);
   });
 }

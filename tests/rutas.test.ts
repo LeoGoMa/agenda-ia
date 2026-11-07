@@ -33,6 +33,8 @@ const TEXTOS = {
   invalido: "Escriba un mensaje de 1 a 1000 caracteres.",
   limite: "Llegó al límite de la demo por ahora. Si quiere un bot así para su negocio, escríbale a Forge Studio.",
   enEspera: "Le atiende una persona; en un momento le contesta",
+  // De las rutas, al pasar el tope de sesiones nuevas por IP (antes de saber de qué negocio se trata).
+  limiteSesiones: "Llegaste al límite de la demo por ahora. Si quieres un bot así para tu negocio, escríbele a Forge Studio.",
 };
 // Cookies alteradas: vacía, texto, uuid v1, uuid v4 con variante inválida, con basura antes o después.
 const COOKIES_MALAS = [
@@ -102,7 +104,7 @@ describe("deps", () => {
   it("fuera de producción y sin variables usa memoria y el responder de demostración", async () => {
     const deps = armarDeps({ NODE_ENV: "test" });
     expect(deps.responder).toBe(responderDev);
-    await expect(deps.asegurarSesion(crypto.randomUUID())).resolves.toBeUndefined();
+    await expect(deps.asegurarSesion(crypto.randomUUID(), IP)).resolves.toBe(true);
     expect(await deps.limpiar()).toBe(0);
     expect(deps.ahora()).toEqual(ahora);
   });
@@ -234,6 +236,7 @@ describe("sesión por cookie", () => {
       repo: { citas: anotado(base.repo.citas), conversaciones: anotado(base.repo.conversaciones) },
       asegurarSesion: async (id) => {
         orden.push(`sesion:${id}`);
+        return true;
       },
     };
     ponerDeps(deps);
@@ -452,6 +455,37 @@ describe("rutas del chat y el panel", () => {
     const tablero = await ana.verPanel();
     expect(deDemo(tablero.cuerpo.citas)).toEqual([]); // el bot no se llamó
     expect(await ana.responder(tablero.cuerpo.conversaciones[0].id, "Hola")).toEqual({ estado: 429, cuerpo: { respuesta: TEXTOS.limite } });
+  });
+
+  it("al pasar el tope de sesiones nuevas por IP responde 429 amable, sin crear ni sembrar la sesión", async () => {
+    const deps = armarDeps({ NODE_ENV: "test", AGENDA_LIMITE_SESIONES_IP_HORA: "2" });
+    ponerDeps(deps);
+    const siembra = vi.spyOn(deps.repo.citas, "crearSiCabe");
+    const ana = visitante();
+    // Las peticiones de una sesión que ya existe no gastan el tope de sesiones nuevas.
+    for (let i = 0; i < 4; i++) expect((await ana.verPanel()).estado).toBe(200);
+    const beto = visitante();
+    expect((await beto.escribir("Hola")).estado).toBe(200);
+
+    const carlos = visitante();
+    siembra.mockClear();
+    const bloqueado = { estado: 429, cuerpo: { error: TEXTOS.limiteSesiones } };
+    expect(await carlos.verPanel()).toEqual(bloqueado);
+    expect(await carlos.escribir("Hola")).toEqual(bloqueado);
+    expect(await carlos.responder(crypto.randomUUID(), "Hola")).toEqual(bloqueado);
+    expect(await carlos.cambiarModo(crypto.randomUUID(), "humano")).toEqual(bloqueado);
+    expect(siembra).not.toHaveBeenCalled();
+
+    // Las sesiones que ya existían siguen, y otra IP puede crear la suya.
+    expect((await ana.verPanel()).estado).toBe(200);
+    expect((await beto.escribir("Hola")).estado).toBe(200);
+    expect((await visitante(undefined, "198.51.100.4").verPanel()).estado).toBe(200);
+
+    // A la hora siguiente Carlos entra y su sesión se crea y se siembra entonces: antes no se había creado.
+    vi.setSystemTime(ahora.getTime() + 60 * 60_000);
+    siembra.mockClear();
+    expect((await carlos.verPanel()).cuerpo.citas.length).toBeGreaterThanOrEqual(3);
+    expect(siembra).toHaveBeenCalled();
   });
 
   it("la IP sale del primer valor de x-forwarded-for", async () => {
