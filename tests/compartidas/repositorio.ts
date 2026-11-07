@@ -285,6 +285,7 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
         modo: "bot",
         mensajes: [],
         historialApi: [],
+        versionPrompt: null,
         mensajesVisitante: 0,
       });
       expect((await repo.conversaciones.obtenerOCrear(sesionId, dental.id)).id).toBe(conversacion.id);
@@ -299,15 +300,23 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
       ]);
     });
 
-    it("guarda mensajes, cuenta los del visitante y reemplaza el historial de la API", async () => {
+    it("obtener devuelve la conversación solo a su sesión", async () => {
+      const { repo, sesionId } = preparar();
+      const conversacion = await repo.conversaciones.obtenerOCrear(sesionId, dental.id);
+      expect(await repo.conversaciones.obtener(sesionId, conversacion.id)).toEqual(conversacion);
+      expect(await codigoDe(repo.conversaciones.obtener(crypto.randomUUID(), conversacion.id))).toBe("DATOS_INVALIDOS");
+      expect(await codigoDe(repo.conversaciones.obtener(sesionId, crypto.randomUUID()))).toBe("DATOS_INVALIDOS");
+    });
+
+    it("guarda mensajes, cuenta los del visitante y reemplaza el historial de la API con su versión", async () => {
       const { repo, sesionId } = preparar();
       const { id } = await repo.conversaciones.obtenerOCrear(sesionId, dental.id);
       const mensaje = (rol: MensajeVisible["rol"], texto: string) => ({ rol, texto, creadoEn: ahora.toISOString() });
       await repo.conversaciones.agregarMensaje(id, mensaje("cliente", "Hola"));
       await repo.conversaciones.agregarMensaje(id, mensaje("bot", "¿En qué le ayudo?"));
       await repo.conversaciones.agregarMensaje(id, mensaje("cliente", "Quiero una limpieza"));
-      await repo.conversaciones.guardarHistorialApi(id, [{ role: "user", content: "viejo" }]);
-      await repo.conversaciones.guardarHistorialApi(id, [{ role: "user", content: "Hola" }]);
+      await repo.conversaciones.guardarHistorialApi(id, [{ role: "user", content: "viejo" }], "version-vieja");
+      await repo.conversaciones.guardarHistorialApi(id, [{ role: "user", content: "Hola" }], "version-nueva");
 
       const guardada = await repo.conversaciones.obtenerOCrear(sesionId, dental.id);
       expect(guardada.mensajes.map((m) => [m.rol, m.texto])).toEqual([
@@ -317,6 +326,7 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
       ]);
       expect(guardada.mensajesVisitante).toBe(2);
       expect(guardada.historialApi).toEqual([{ role: "user", content: "Hola" }]);
+      expect(guardada.versionPrompt).toBe("version-nueva");
       expect(await codigoDe(repo.conversaciones.agregarMensaje(crypto.randomUUID(), mensaje("cliente", "x")))).toBe(
         "DATOS_INVALIDOS",
       );

@@ -15,6 +15,8 @@ export interface Conversacion {
   mensajes: MensajeVisible[];
   /** Mensajes tal como van a la API de Claude. */
   historialApi: unknown[];
+  /** Hash del prompt del sistema y las herramientas con que se armó `historialApi`; null si nunca se guardó. */
+  versionPrompt: string | null;
   /** Mensajes con rol "cliente"; sirve para el tope por conversación. */
   mensajesVisitante: number;
 }
@@ -50,10 +52,11 @@ export interface RepositorioCitas {
 /** Una conversación por sesión y negocio. Una conversación inexistente o de otra sesión lanza `DATOS_INVALIDOS`. */
 export interface RepositorioConversaciones {
   obtenerOCrear(sesionId: string, negocioId: string): Promise<Conversacion>;
+  obtener(sesionId: string, conversacionId: string): Promise<Conversacion>;
   /** Agrega al final; un mensaje con rol "cliente" suma uno a `mensajesVisitante`. */
   agregarMensaje(conversacionId: string, m: MensajeVisible): Promise<void>;
-  /** Reemplaza el historial completo. */
-  guardarHistorialApi(conversacionId: string, historial: unknown[]): Promise<void>;
+  /** Reemplaza el historial completo y guarda con qué versión del prompt se armó. */
+  guardarHistorialApi(conversacionId: string, historial: unknown[], versionPrompt: string | null): Promise<void>;
   cambiarModo(sesionId: string, conversacionId: string, modo: "bot" | "humano"): Promise<void>;
   listar(sesionId: string, negocioId: string): Promise<Conversacion[]>;
 }

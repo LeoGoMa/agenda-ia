@@ -74,10 +74,23 @@ export function crearRepoMemoria(): Repositorio {
       async obtenerOCrear(sesionId, negocioId) {
         let c = conversaciones.find((c) => c.sesionId === sesionId && c.negocioId === negocioId);
         if (!c) {
-          c = { id: crypto.randomUUID(), sesionId, negocioId, modo: "bot", mensajes: [], historialApi: [], mensajesVisitante: 0 };
+          c = {
+            id: crypto.randomUUID(),
+            sesionId,
+            negocioId,
+            modo: "bot",
+            mensajes: [],
+            historialApi: [],
+            versionPrompt: null,
+            mensajesVisitante: 0,
+          };
           conversaciones.push(c);
         }
         return structuredClone(c);
+      },
+
+      async obtener(sesionId, conversacionId) {
+        return structuredClone(conversacion(conversacionId, sesionId));
       },
 
       async agregarMensaje(conversacionId, m) {
@@ -86,8 +99,10 @@ export function crearRepoMemoria(): Repositorio {
         if (m.rol === "cliente") c.mensajesVisitante++;
       },
 
-      async guardarHistorialApi(conversacionId, historial) {
-        conversacion(conversacionId).historialApi = structuredClone(historial);
+      async guardarHistorialApi(conversacionId, historial, versionPrompt) {
+        const c = conversacion(conversacionId);
+        c.historialApi = structuredClone(historial);
+        c.versionPrompt = versionPrompt;
       },
 
       async cambiarModo(sesionId, conversacionId, modo) {
