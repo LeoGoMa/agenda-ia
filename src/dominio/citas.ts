@@ -7,9 +7,9 @@ const HORA = 60 * MINUTO;
 // Tope abierto para buscar hacia adelante; cualquier base de datos entiende esta fecha.
 const SIN_TOPE = "9999-12-31T23:59:59.999Z";
 
-/** Solo los dígitos; deben ser 10. */
+/** Solo los dígitos, sin la lada 52 de México («+52 55…»); deben quedar 10. */
 function telefonoValido(telefono: string): string {
-  const digitos = telefono.replace(/\D/g, "");
+  const digitos = telefono.replace(/\D/g, "").replace(/^52(\d{10})$/, "$1");
   if (digitos.length !== 10) throw new ErrorDominio("DATOS_INVALIDOS", "El teléfono debe tener 10 dígitos");
   return digitos;
 }

@@ -59,7 +59,10 @@ export function crearRepoMemoria(): Repositorio {
 
       async actualizar(sesionId, id, cambios, capacidad) {
         const i = citas.findIndex((c) => c.id === id && c.sesionId === sesionId);
-        if (i < 0) throw new ErrorDominio("CITA_NO_ENCONTRADA", `No existe la cita «${id}»`);
+        const mueve = cambios.inicio !== undefined || cambios.fin !== undefined || cambios.servicioId !== undefined;
+        if (i < 0 || (mueve && citas[i].estado !== "confirmada")) {
+          throw new ErrorDominio("CITA_NO_ENCONTRADA", `No existe una cita vigente con id «${id}»`);
+        }
         const actualizada = enUtc({ ...citas[i], ...cambios });
         revisarChoque(actualizada, capacidad);
         citas[i] = actualizada;

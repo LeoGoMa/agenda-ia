@@ -113,6 +113,24 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
       expect(await todas()).toEqual([]);
     });
 
+    it("el teléfono acepta lada 52, espacios y guiones y se guarda en 10 dígitos", async () => {
+      const { repo, sesionId, agendarDental, todas } = preparar();
+      const telefonos = { [MARTES_9]: "+52 55 0000 0012", [MARTES_11]: "52 55 0000 0012", [JUEVES_9]: "55-0000-0012" };
+      for (const [inicio, telefono] of Object.entries(telefonos)) {
+        const cita = await agendarDental(inicio, { nombre: "Cliente Demo", telefono });
+        expect(cita.cliente.telefono, telefono).toBe("5500000012");
+      }
+      for (const telefono of ["123", "53 55 0000 0012", "52 55 0000 001"]) {
+        expect(await codigoDe(agendarDental(JUEVES_11, { nombre: "Cliente Demo", telefono })), telefono).toBe(
+          "DATOS_INVALIDOS",
+        );
+      }
+      expect((await todas()).map((c) => c.cliente.telefono)).toEqual(Array(3).fill("5500000012"));
+      const buscar = (telefono: string) =>
+        buscarPorTelefono(repo.citas, { sesionId, negocioId: dental.id, telefono, ahora });
+      expect(await buscar("+52 55 0000 0012")).toHaveLength(3);
+    });
+
     it("nombre de menos de 2 o más de 60 caracteres lanza DATOS_INVALIDOS", async () => {
       const { agendarDental, todas } = preparar();
       for (const nombre of ["A", "   A   ", "a".repeat(61)]) {
@@ -215,6 +233,33 @@ export function pruebasDeRepositorio(nombre: string, crearRepo: () => Repositori
       await crear(nueva(MARTES_10, MARTES_1030)); // solo pisa la base, que ya está cancelada
       await crear(nueva(MARTES_10, MARTES_11, { sesionId: crypto.randomUUID() }));
       await crear(nueva(MARTES_10, MARTES_11, { negocioId: barberia.id, servicioId: "corte" }));
+    });
+
+    it("actualizar no mueve ni cambia de servicio una cita cancelada", async () => {
+      const { repo, sesionId, nueva } = preparar();
+      const cita = await repo.citas.crearSiCabe(nueva(MARTES_9, MARTES_10), 1);
+      const cancelada = await repo.citas.actualizar(sesionId, cita.id, { estado: "cancelada" }, 1);
+      const intentos = [{ inicio: MARTES_11, fin: MARTES_12 }, { inicio: MARTES_11 }, { fin: MARTES_12 }, { servicioId: "resina" }];
+      for (const cambios of intentos) {
+        expect(await codigoDe(repo.citas.actualizar(sesionId, cita.id, cambios, 1)), JSON.stringify(cambios)).toBe(
+          "CITA_NO_ENCONTRADA",
+        );
+      }
+      expect(await repo.citas.obtener(sesionId, cita.id)).toEqual(cancelada);
+    });
+
+    it("actualizar en paralelo dos citas al mismo horario: solo una gana", async () => {
+      const { repo, sesionId, nueva, todas } = preparar();
+      const martes = await repo.citas.crearSiCabe(nueva(MARTES_9, MARTES_10), 1);
+      const jueves = await repo.citas.crearSiCabe(nueva(JUEVES_9, "2026-11-12T16:00:00.000Z"), 1);
+      const mover = (id: string) => repo.citas.actualizar(sesionId, id, { inicio: MARTES_11, fin: MARTES_12 }, 1);
+
+      const resultados = await Promise.allSettled([mover(martes.id), mover(jueves.id)]);
+      expect(resultados.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rechazados = resultados.filter((r) => r.status === "rejected");
+      expect(rechazados).toHaveLength(1);
+      expect(rechazados[0].reason).toMatchObject({ codigo: "HORARIO_NO_DISPONIBLE" });
+      expect((await todas()).filter((c) => c.inicio === MARTES_11)).toHaveLength(1);
     });
 
     it("guarda y devuelve inicio y fin en UTC con Z", async () => {

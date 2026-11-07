@@ -34,8 +34,10 @@ export interface RepositorioCitas {
   /** Atómica: el chequeo de choque y la escritura no se pueden intercalar con otra reserva. */
   crearSiCabe(cita: Cita, capacidad: number): Promise<Cita>;
   /**
-   * Lanza `CITA_NO_ENCONTRADA` si la cita no es de la sesión. Si la cita queda confirmada,
-   * aplica la regla de choque de forma atómica sin contarse a sí misma.
+   * Lanza `CITA_NO_ENCONTRADA` si la cita no es de la sesión, o si cambia `inicio`, `fin` o `servicioId`
+   * de una cita que no está confirmada: así reprogramar una cita que otra petición acaba de cancelar
+   * falla en vez de dar un falso éxito. Si la cita queda confirmada, aplica la regla de choque de forma
+   * atómica sin contarse a sí misma. El chequeo de estado va en la misma operación atómica.
    */
   actualizar(
     sesionId: string,
