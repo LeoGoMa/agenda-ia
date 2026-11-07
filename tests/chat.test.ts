@@ -209,13 +209,13 @@ describe("manejarMensaje", () => {
     expect(responder).toHaveBeenCalledTimes(30);
   });
 
-  it("texto vacío o de más de 1000 da 400", async () => {
-    const { enviar, responder, conversacion } = preparar();
+  it("texto vacío o de más de 1000 da 400 sin crear la conversación", async () => {
+    const { repo, enviar, responder, sesionId } = preparar();
     for (const texto of ["", "   \n\t ", "a".repeat(1001), 42 as unknown as string]) {
       expect(await enviar(texto), String(texto).slice(0, 10)).toEqual({ estado: 400, respuesta: TEXTOS.usted.invalido, modo: "bot" });
     }
     expect(responder).not.toHaveBeenCalled();
-    expect((await conversacion()).mensajes).toEqual([]);
+    expect(await repo.conversaciones.listar(sesionId, "dental")).toEqual([]);
 
     // 1000 caracteres sí caben, y un emoji cuenta como uno.
     expect((await enviar("a".repeat(1000))).estado).toBe(200);
@@ -290,29 +290,48 @@ describe("manejarMensaje", () => {
     expect((await barberia.conversacion()).versionPrompt).not.toBe(antes.versionPrompt);
   });
 
-  it("con un historial de más de 60 000 caracteres no se llama al bot", async () => {
-    const { repo, enviar, responder, conversacion } = preparar();
-    await enviar("Hola");
+  it("con un historial de más de 120 000 caracteres no se llama al bot ni se gastan los contadores", async () => {
+    const { repo, enviar, responder, conversacion } = preparar({ limites: { sesionPorHora: 3 } });
+    await enviar("Hola"); // sesión: 1 de 3
     const { id, versionPrompt } = await conversacion();
     // Un historial que, serializado, mide exactamente `largo` caracteres.
     const vacio = JSON.stringify([{ role: "user", content: "" }]).length;
     const historialDe = (largo: number) => [{ role: "user", content: "a".repeat(largo - vacio) }];
 
-    await repo.conversaciones.guardarHistorialApi(id, historialDe(60_001), versionPrompt);
-    expect(await enviar("¿Siguen ahí?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
+    await repo.conversaciones.guardarHistorialApi(id, historialDe(120_001), versionPrompt);
+    // Si estos dos 429 gastaran contadores, la sesión llegaría a 3 y el siguiente 200 sería un 429.
+    for (let i = 0; i < 2; i++) {
+      expect(await enviar("¿Siguen ahí?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
+    }
     expect(responder).toHaveBeenCalledTimes(1);
     const rechazada = await conversacion();
     expect(rechazada.mensajes).toHaveLength(2); // el mensaje no se guarda
-    expect(rechazada.historialApi).toEqual(historialDe(60_001)); // y el historial no se recorta
+    expect(rechazada.historialApi).toEqual(historialDe(120_001)); // y el historial no se recorta
 
-    await repo.conversaciones.guardarHistorialApi(id, historialDe(60_000), versionPrompt);
-    expect((await enviar("¿Siguen ahí?")).estado).toBe(200);
+    await repo.conversaciones.guardarHistorialApi(id, historialDe(120_000), versionPrompt);
+    expect((await enviar("¿Siguen ahí?")).estado).toBe(200); // sesión: 2 de 3
     expect(responder).toHaveBeenCalledTimes(2);
 
     // Cuenta lo que se mandaría: un historial de otra versión del prompt no se reenvía.
-    await repo.conversaciones.guardarHistorialApi(id, historialDe(60_001), "version-anterior");
-    expect((await enviar("¿Y ahora?")).estado).toBe(200);
+    await repo.conversaciones.guardarHistorialApi(id, historialDe(120_001), "version-anterior");
+    expect((await enviar("¿Y ahora?")).estado).toBe(200); // sesión: 3 de 3
     expect(responder.mock.calls[2][0].historialApi).toEqual([]);
+  });
+
+  it("un historial sin versión (solo texto del modo humano) se conserva al volver al bot", async () => {
+    const { deps, enviar, responder, conversacion, panel, sesionId } = preparar();
+    const { id } = await conversacion();
+    await deps.repo.conversaciones.cambiarModo(sesionId, id, "humano"); // la persona toma el chat antes que el bot
+    await enviar("Hola, ¿hay alguien?");
+    await panel("Hola, le atiende recepción.");
+    expect((await conversacion()).versionPrompt).toBeNull();
+
+    await devolverAlBot(deps, { sesionId, conversacionId: id });
+    expect((await enviar("¿Me agenda una limpieza?")).estado).toBe(200);
+    expect(responder.mock.calls[0][0].historialApi).toEqual([
+      { role: "user", content: "Hola, ¿hay alguien?" },
+      { role: "user", content: "[Respuesta de una persona del negocio]: Hola, le atiende recepción." },
+    ]);
   });
 
   it("si el bot falla, el error sube y no queda un turno a medias", async () => {

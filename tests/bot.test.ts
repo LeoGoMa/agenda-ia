@@ -76,6 +76,8 @@ const respuesta = (
   }) as unknown as MensajeApi;
 
 const texto = (text: string) => ({ type: "text", text, citations: null });
+/** El mensaje con que el turno cierra cuando el visitante vio un texto distinto del que generó el modelo. */
+const cierre = (text: string) => ({ role: "assistant", content: [{ type: "text", text }] });
 const usarHerramienta = (id: string, name: string, input: unknown) => ({ type: "tool_use", id, name, input });
 
 /** Cliente sin red que contesta el guion en orden; la última respuesta se repite. Guarda una copia de cada petición. */
@@ -432,7 +434,7 @@ describe("responder", () => {
     });
     expect(json).toEqual(NO_EJECUTADA.tope);
     expect(historial.at(-2)).toBe(mensaje);
-    expect(historial.at(-1)).toEqual({ role: "assistant", content: SIN_TERMINAR.usted });
+    expect(historial.at(-1)).toEqual(cierre(SIN_TERMINAR.usted));
   });
 
   it("max_tokens no ejecuta la herramienta cortada y cierra el turno con el texto de respaldo", async () => {
@@ -462,8 +464,40 @@ describe("responder", () => {
       { role: "user", content: "Agéndeme el martes a las 9" },
       { role: "assistant", content: [agendar] },
       mensaje,
-      { role: "assistant", content: SIN_TERMINAR.usted },
+      cierre(SIN_TERMINAR.usted),
     ]);
+  });
+
+  it("si el visitante ve otro texto que el del modelo, el turno cierra con ese texto y nunca guarda un assistant vacío", async () => {
+    const pensamiento = { type: "thinking", thinking: "", signature: "firma-opaca" };
+    const casos: [string, MensajeApi, unknown[]][] = [
+      ["end_turn sin content", respuesta([], "end_turn"), [cierre(SIN_TERMINAR.usted)]],
+      [
+        "end_turn solo con pensamiento",
+        respuesta([pensamiento], "end_turn"),
+        [{ role: "assistant", content: [pensamiento] }, cierre(SIN_TERMINAR.usted)],
+      ],
+      [
+        "max_tokens sin tool_use",
+        respuesta([texto("Le cuento que")], "max_tokens"),
+        [{ role: "assistant", content: [texto("Le cuento que")] }, cierre(SIN_TERMINAR.usted)],
+      ],
+      // Con el texto del modelo no hace falta cerrar: el modelo ya ve lo que vio el visitante.
+      ["end_turn con texto", respuesta([texto("Con gusto.")], "end_turn"), [{ role: "assistant", content: [texto("Con gusto.")] }]],
+    ];
+    for (const [caso, guion, esperados] of casos) {
+      const { herramientas } = preparar();
+      const resultado = await responder({
+        cliente: clienteFalso([guion]).cliente,
+        perfil: dental,
+        historialApi: [],
+        mensaje: "Hola",
+        herramientas,
+        config,
+      });
+      expect(resultado.historialApi, caso).toEqual([{ role: "user", content: "Hola" }, ...esperados]);
+      expect(resultado.texto, caso).toBe(caso === "end_turn con texto" ? "Con gusto." : SIN_TERMINAR.usted);
+    }
   });
 
   it("los textos fijos siguen el trato del negocio", async () => {
@@ -501,7 +535,7 @@ describe("responder", () => {
     expect(await todas()).toEqual([]); // una negativa puede cortar un tool_use a medias: no se ejecuta
     // La respuesta negada no entra al historial; las vueltas anteriores sí, porque sus herramientas pudieron cambiar datos,
     // y el turno cierra con la disculpa que vio el visitante.
-    expect(resultado.historialApi).toEqual([...peticiones[1].messages, { role: "assistant", content: DISCULPA.usted }]);
+    expect(resultado.historialApi).toEqual([...peticiones[1].messages, cierre(DISCULPA.usted)]);
     expect(resultado.historialApi).toHaveLength(historialPrevio.length + 4);
 
     // Negada de entrada: el mensaje del visitante tampoco se guarda, para no repetir la negativa en cada turno.

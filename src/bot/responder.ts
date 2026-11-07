@@ -86,6 +86,8 @@ export async function responder({
   ];
   let pasoAHumano = false;
   const terminar = (texto: string): RespuestaBot => ({ texto, historialApi: mensajes, pasoAHumano, uso });
+  /** Cierra el turno con el texto que vio el visitante, para que el modelo tenga el mismo contexto. */
+  const cerrarCon = (visible: string) => mensajes.push({ role: "assistant", content: [{ type: "text", text: visible }] });
 
   for (let vuelta = 1; ; vuelta++) {
     const respuesta = await cliente.beta.messages.create({
@@ -110,11 +112,12 @@ export async function responder({
     // para que el modelo vea lo mismo que el visitante.
     if (respuesta.stop_reason === "refusal") {
       if (vuelta === 1) mensajes.pop();
-      else mensajes.push({ role: "assistant", content: textos.negativa });
+      else cerrarCon(textos.negativa);
       return terminar(textos.negativa);
     }
 
-    mensajes.push({ role: "assistant", content: respuesta.content });
+    // Un assistant con content vacío da 400 al reenviar el historial.
+    if (respuesta.content.length > 0) mensajes.push({ role: "assistant", content: respuesta.content });
     const llamadas = respuesta.content.filter((b) => b.type === "tool_use");
 
     if (respuesta.stop_reason !== "tool_use" || vuelta === MAX_VUELTAS) {
@@ -125,8 +128,7 @@ export async function responder({
         .trim();
       const visible = respuesta.stop_reason === "end_turn" && texto ? texto : textos.sinTerminar;
       // Sin otra vuelta nadie vería el resultado, así que no se ejecuta (no se agenda nada a ciegas);
-      // aun así cada tool_use necesita su tool_result o el siguiente mensaje da 400. Después, el turno
-      // cierra con el texto que vio el visitante, para que el modelo tenga el mismo contexto.
+      // aun así cada tool_use necesita su tool_result o el siguiente mensaje da 400.
       if (llamadas.length > 0) {
         const motivo = respuesta.stop_reason === "tool_use" ? NO_EJECUTADA_TOPE : NO_EJECUTADA_CORTADA;
         mensajes.push({
@@ -138,8 +140,9 @@ export async function responder({
             content: JSON.stringify({ ok: false, codigo: "NO_EJECUTADA", mensaje: motivo }),
           })),
         });
-        mensajes.push({ role: "assistant", content: visible });
       }
+      // Respaldo, end_turn sin texto o max_tokens: el visitante vio otro texto que el del modelo.
+      if (llamadas.length > 0 || visible !== texto) cerrarCon(visible);
       return terminar(visible);
     }
 

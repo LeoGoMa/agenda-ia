@@ -10,7 +10,7 @@ import type { Limitador } from "./limites";
 
 const MAX_CARACTERES = 1000;
 /** Tope del historial serializado que se manda a Claude: cada llamada paga todo el historial como entrada. */
-const MAX_HISTORIAL_CARACTERES = 60_000;
+const MAX_HISTORIAL_CARACTERES = 120_000;
 const TEXTOS: Record<PerfilNegocio["trato"], { invalido: string; limite: string; enEspera: string }> = {
   tu: {
     invalido: "Escribe un mensaje de 1 a 1000 caracteres.",
@@ -62,7 +62,8 @@ function versionPrompt(perfil: PerfilNegocio, definiciones: Anthropic.Beta.BetaT
 
 /**
  * Un mensaje del visitante: valida, revisa límites, lo guarda y, si la conversación está con el bot, le contesta.
- * Con un historial de más de 60 000 caracteres responde el 429 sin llamar a Claude (el historial nunca se recorta).
+ * Un texto inválido da 400 sin crear la conversación. Con un historial de más de 120 000 caracteres responde
+ * el 429 sin llamar a Claude ni gastar contadores (el historial nunca se recorta).
  * Un negocio inexistente lanza `DATOS_INVALIDOS`; un error del bot sube a quien llama sin guardar el turno a medias.
  */
 export async function manejarMensaje(
@@ -72,10 +73,30 @@ export async function manejarMensaje(
   const { repo, ahora } = deps;
   const perfil = obtenerPerfil(negocioId);
   const textos = TEXTOS[perfil.trato];
-  const conv = await repo.conversaciones.obtenerOCrear(sesionId, negocioId);
 
   const limpio = textoValido(texto);
-  if (limpio === null) return { estado: 400, respuesta: textos.invalido, modo: conv.modo };
+  if (limpio === null) {
+    const [existente] = await repo.conversaciones.listar(sesionId, negocioId);
+    return { estado: 400, respuesta: textos.invalido, modo: existente?.modo ?? "bot" };
+  }
+
+  const conv = await repo.conversaciones.obtenerOCrear(sesionId, negocioId);
+  const herramientas = crearHerramientas({
+    repo,
+    perfil,
+    sesionId,
+    conversacionId: conv.id,
+    ahora,
+    // El modo cambia al final, con `pasoAHumano` y junto con el historial: si el turno falla, no queda a medias.
+    alPasarAHumano: async () => {},
+  });
+  const version = versionPrompt(perfil, herramientas.definiciones);
+  // Sin versión, el historial solo trae texto del modo humano, que se puede reenviar con cualquier prompt.
+  const historialApi = conv.versionPrompt === null || conv.versionPrompt === version ? conv.historialApi : [];
+  // Antes del limitador: un 429 por tamaño no gasta los contadores de sesión e IP.
+  if (conv.modo === "bot" && JSON.stringify(historialApi).length > MAX_HISTORIAL_CARACTERES) {
+    return { estado: 429, respuesta: textos.limite, modo: conv.modo };
+  }
 
   const limite = await deps.limitador.verificar({
     ip,
@@ -93,25 +114,15 @@ export async function manejarMensaje(
     return { estado: 200, respuesta: textos.enEspera, modo: "humano" };
   }
 
-  const herramientas = crearHerramientas({
-    repo,
-    perfil,
-    sesionId,
-    conversacionId: conv.id,
-    ahora,
-    // El modo cambia al final, con `pasoAHumano` y junto con el historial: si el turno falla, no queda a medias.
-    alPasarAHumano: async () => {},
-  });
-  const version = versionPrompt(perfil, herramientas.definiciones);
-  const historialApi = conv.versionPrompt === version ? conv.historialApi : [];
-  if (JSON.stringify(historialApi).length > MAX_HISTORIAL_CARACTERES) {
-    return { estado: 429, respuesta: textos.limite, modo: conv.modo };
-  }
-
   await repo.conversaciones.agregarMensaje(conv.id, mensajeCliente);
   const bot = await deps.responder({ perfil, historialApi, mensaje: limpio, herramientas });
-  // shortcut: se reemplaza el historial leído al inicio del turno; si durante esos segundos una persona escribe
-  // desde el panel, su mensaje queda visible pero sale del historial de la API. Revisar si el panel deja escribir en modo bot.
+  // shortcut: cada petición (aquí y en `mensajeHumano`) lee la conversación al inicio y al final reemplaza el historial
+  // de la API, sin candado. Carreras conocidas: (1) en modo bot, un doble clic, mensajes en paralelo o una persona que
+  // escribe desde el panel mientras el bot contesta: el último en guardar pisa al otro en historialApi (los mensajes
+  // visibles y las citas sí quedan); (2) con peticiones simultáneas, el tope por conversación se revisa con el conteo
+  // leído al inicio y se puede pasar por unas cuantas; (3) en modo humano, si el visitante y la persona escriben a la
+  // vez, uno de los dos mensajes queda visible pero fuera de historialApi. La interfaz desactiva el envío mientras hay
+  // una petición en curso; si hace falta más, un candado por conversación (advisory lock en una RPC).
   await repo.conversaciones.guardarHistorialApi(conv.id, bot.historialApi, version);
   await repo.conversaciones.agregarMensaje(conv.id, { rol: "bot", texto: bot.texto, creadoEn: ahora().toISOString() });
   if (bot.pasoAHumano) await repo.conversaciones.cambiarModo(sesionId, conv.id, "humano");
