@@ -11,7 +11,14 @@ import { crearHerramientas } from "@/src/bot/herramientas";
 import { MARCA_DEMO, responderDev } from "@/src/bot/responderDev";
 import { obtenerPerfil } from "@/src/dominio/perfiles";
 import { crearRepoMemoria } from "@/src/repo/memoria";
+import { devolverAlBot } from "@/src/servicio/chat";
 import { armarDeps, ponerDeps, type Deps } from "@/src/servicio/deps";
+
+// Un espía que llama a la función real: así se ve qué camino del servicio usa cada ruta.
+vi.mock("@/src/servicio/chat", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/src/servicio/chat")>();
+  return { ...real, devolverAlBot: vi.fn(real.devolverAlBot) };
+});
 
 const ahora = new Date("2026-11-09T15:00:00Z"); // lunes 9:00 en CDMX; la clínica pide 2 h de anticipación
 const PRIMER_HORARIO = "2026-11-09T17:00:00.000Z"; // 11:00 en CDMX
@@ -313,6 +320,21 @@ describe("rutas del chat y el panel", () => {
     await chat(peticion("/api/chat", { sesion: beto.sesion, cuerpo: { negocioId: "dental", texto: "Hola", sesionId: ana.sesion } }));
     expect((await ana.verPanel()).cuerpo.conversaciones[0].mensajes).toHaveLength(2);
     expect((await beto.verPanel()).cuerpo.conversaciones[0].mensajes).toHaveLength(2);
+  });
+
+  it("«Devolver al bot» pasa por devolverAlBot del servicio; «Tomar el chat» no", async () => {
+    const ana = visitante();
+    await ana.escribir("Hola");
+    const [conv] = (await ana.verPanel()).cuerpo.conversaciones;
+    vi.mocked(devolverAlBot).mockClear();
+
+    expect(await ana.cambiarModo(conv.id, "humano")).toEqual({ estado: 200, cuerpo: { ok: true } });
+    expect(devolverAlBot).not.toHaveBeenCalled();
+    expect((await ana.verPanel()).cuerpo.conversaciones[0].modo).toBe("humano");
+
+    expect(await ana.cambiarModo(conv.id, "bot")).toEqual({ estado: 200, cuerpo: { ok: true } });
+    expect(devolverAlBot).toHaveBeenCalledExactlyOnceWith(expect.anything(), { sesionId: ana.sesion, conversacionId: conv.id });
+    expect((await ana.verPanel()).cuerpo.conversaciones[0].modo).toBe("bot");
   });
 
   it("no se puede tocar la conversación de otra sesión desde el panel", async () => {
