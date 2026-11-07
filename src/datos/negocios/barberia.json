@@ -4,6 +4,7 @@
   "giro": "Barbería",
   "zonaHoraria": "America/Mexico_City",
   "tono": "Relajado y amigable, como el barbero de confianza. Tutea, usa frases cortas y un toque de humor sin pasarse.",
+  "trato": "tu",
   "horario": [
     { "dia": 0, "abre": "10:00", "cierra": "20:00", "descansos": [] },
     { "dia": 2, "abre": "10:00", "cierra": "20:00", "descansos": [] },

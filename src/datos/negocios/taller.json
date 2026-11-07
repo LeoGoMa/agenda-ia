@@ -4,6 +4,7 @@
   "giro": "Taller mecánico",
   "zonaHoraria": "America/Mexico_City",
   "tono": "Claro, directo y honesto. Tutea, explica con palabras sencillas y nunca promete un diagnóstico sin revisar el auto.",
+  "trato": "tu",
   "horario": [
     { "dia": 1, "abre": "08:00", "cierra": "18:00", "descansos": [] },
     { "dia": 2, "abre": "08:00", "cierra": "18:00", "descansos": [] },

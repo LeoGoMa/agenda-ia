@@ -9,32 +9,52 @@ import { crearRepoMemoria } from "@/src/repo/memoria";
 
 type Parametros = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
 type MensajeApi = Anthropic.Beta.Messages.BetaMessage;
+type MensajeParam = Anthropic.Beta.Messages.BetaMessageParam;
 
 const ahora = new Date("2026-11-09T15:00:00Z"); // lunes 9:00 en CDMX
-const dental = obtenerPerfil("dental"); // capacidad 1, limpieza de 60 min
+const dental = obtenerPerfil("dental"); // capacidad 1, limpieza de 60 min, trato de usted
+const barberia = obtenerPerfil("barberia"); // trato de tú
 const MARTES_9 = "2026-11-10T15:00:00.000Z";
-const DISCULPA = "Perdón, no puedo ayudarte con eso. ¿Quieres que te comunique con una persona?";
+const DISCULPA = {
+  usted: "Perdón, no puedo ayudarle con eso. ¿Quiere que le comunique con una persona?",
+  tu: "Perdón, no puedo ayudarte con eso. ¿Quieres que te comunique con una persona?",
+};
+const SIN_TERMINAR = {
+  usted: "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repite o quiere que le comunique con una persona?",
+  tu: "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repites o quieres que te comunique con una persona?",
+};
+const NO_EJECUTADA = {
+  tope: { ok: false, codigo: "NO_EJECUTADA", mensaje: "No se ejecutó: se llegó al tope de 6 vueltas de herramientas de este mensaje." },
+  cortada: { ok: false, codigo: "NO_EJECUTADA", mensaje: "No se ejecutó: la respuesta se cortó antes de terminar." },
+};
 const config: ConfigBot = { modelo: "modelo-de-prueba", esfuerzo: "medium" };
 const cliente = { nombre: "Cliente Demo", telefono: "55 0000 0001" };
 
-const preparar = () => {
+const preparar = (perfil = dental, momento = ahora) => {
   const repo = crearRepoMemoria();
   const sesionId = crypto.randomUUID();
   const alPasarAHumano = vi.fn(async () => {});
   const herramientas = crearHerramientas({
     repo,
-    perfil: dental,
+    perfil,
     sesionId,
     conversacionId: crypto.randomUUID(),
-    ahora: () => ahora,
+    ahora: () => momento,
     alPasarAHumano,
   });
   const ejecutar = async (nombre: string, entrada: unknown) => {
     const { contenido, esError } = await herramientas.ejecutar(nombre, entrada);
     return { ...JSON.parse(contenido), esError };
   };
-  const todas = () => repo.citas.listar(sesionId, dental.id, "2026-11-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+  const todas = () => repo.citas.listar(sesionId, perfil.id, "2026-11-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
   return { repo, sesionId, herramientas, ejecutar, todas, alPasarAHumano };
+};
+
+/** El último mensaje `user` del historial, que debe traer un solo tool_result; devuelve también su contenido ya parseado. */
+const ultimoToolResult = (historial: unknown[]) => {
+  const mensaje = (historial as MensajeParam[]).findLast((m) => m.role === "user");
+  const bloques = mensaje?.content as Anthropic.Beta.Messages.BetaToolResultBlockParam[];
+  return { mensaje, json: JSON.parse(String(bloques[0].content)) };
 };
 
 /** Respuesta de la API con lo mínimo que lee el bot. */
@@ -101,6 +121,7 @@ describe("promptDelSistema", () => {
       "agendar_cita",
       "pasar_a_humano",
       "obtener_fecha_hora",
+      "Si un dato del negocio no está aquí ni te lo dan las herramientas, no lo inventes: dilo y ofrece pasar con una persona (pasar_a_humano).",
       "Limpieza dental (id: limpieza): 60 min, $850 MXN",
       "Blanqueamiento en consultorio (id: blanqueamiento): 90 min, $3,800 MXN",
       "lunes: de 09:00 a 19:00, descanso de 14:00 a 15:00",
@@ -153,8 +174,8 @@ describe("herramientas", () => {
 
   it("agendar_cita fuera de horario devuelve error y no guarda", async () => {
     const { ejecutar, todas } = preparar();
-    // 3:00 está cerrado, 14:00 es la comida, el domingo no abre y una hora antes de ahora ya pasó.
-    for (const inicio of ["2026-11-10T09:00:00.000Z", "2026-11-10T20:00:00.000Z", "2026-11-15T16:00:00.000Z", "2026-11-09T14:00:00.000Z"]) {
+    // 3:00 está cerrado, 14:00 es la comida y el domingo no abre.
+    for (const inicio of ["2026-11-10T09:00:00.000Z", "2026-11-10T20:00:00.000Z", "2026-11-15T16:00:00.000Z"]) {
       expect(await ejecutar("agendar_cita", { servicioId: "limpieza", inicio, ...cliente }), inicio).toMatchObject({
         ok: false,
         codigo: "HORARIO_NO_DISPONIBLE",
@@ -163,6 +184,40 @@ describe("herramientas", () => {
       });
     }
     expect(await todas()).toEqual([]);
+  });
+
+  it("agendar en hora que ya pasó devuelve error y no guarda", async () => {
+    const viernes10 = "2026-11-06T16:00:00.000Z"; // viernes 10:00 en CDMX: dentro del horario
+    const elJuevesAntes = preparar(dental, new Date("2026-11-05T15:00:00Z"));
+    expect(await elJuevesAntes.ejecutar("agendar_cita", { servicioId: "limpieza", inicio: viernes10, ...cliente })).toMatchObject({
+      ok: true,
+    });
+
+    const { ejecutar, todas } = preparar(); // el lunes siguiente ese horario ya pasó
+    expect(await ejecutar("agendar_cita", { servicioId: "limpieza", inicio: viernes10, ...cliente })).toMatchObject({
+      ok: false,
+      codigo: "HORARIO_NO_DISPONIBLE",
+      esError: true,
+    });
+    expect(await todas()).toEqual([]);
+  });
+
+  it("ver_disponibilidad rechaza fechas fuera de la ventana de políticas sin ir al repositorio", async () => {
+    // Lunes 21:00 en CDMX y ya martes en UTC: «hoy» es el día local. Dental agenda hasta 30 días adelante.
+    const { repo, ejecutar } = preparar(dental, new Date("2026-11-10T03:00:00Z"));
+    const listar = vi.spyOn(repo.citas, "listar");
+    for (const fecha of ["2026-11-08", "2026-12-10", "2027-11-09"]) {
+      expect(await ejecutar("ver_disponibilidad", { servicioId: "limpieza", fecha }), fecha).toMatchObject({
+        ok: false,
+        codigo: "FUERA_DE_POLITICA",
+        esError: true,
+      });
+    }
+    expect(listar).not.toHaveBeenCalled();
+    for (const fecha of ["2026-11-09", "2026-12-09"]) {
+      expect(await ejecutar("ver_disponibilidad", { servicioId: "limpieza", fecha }), fecha).toMatchObject({ ok: true, fecha });
+    }
+    expect(listar).toHaveBeenCalledTimes(2);
   });
 
   it("agendar_cita con entrada que no cumple el esquema devuelve DATOS_INVALIDOS", async () => {
@@ -365,15 +420,63 @@ describe("responder", () => {
 
     expect(peticiones).toHaveLength(6);
     expect(await todas()).toEqual([]); // la herramienta de la sexta vuelta no se ejecuta: nadie vería su resultado
-    expect(resultado.texto).not.toBe("Ya casi.");
-    expect(resultado.texto).toContain("persona");
-    // Todo tool_use queda con su tool_result, para que el siguiente mensaje no dé 400.
-    const historial = resultado.historialApi as Anthropic.Beta.Messages.BetaMessageParam[];
-    expect(historial).toHaveLength(1 + 6 * 2);
-    expect(historial.at(-1)).toEqual({
+    expect(resultado.texto).toBe(SIN_TERMINAR.usted);
+    // Todo tool_use queda con su tool_result, para que el siguiente mensaje no dé 400,
+    // y el turno cierra con el mismo texto que vio el visitante.
+    const historial = resultado.historialApi as MensajeParam[];
+    expect(historial).toHaveLength(1 + 6 * 2 + 1);
+    const { mensaje, json } = ultimoToolResult(historial);
+    expect(mensaje).toEqual({
       role: "user",
       content: [{ type: "tool_result", tool_use_id: "toolu_x", is_error: true, content: expect.any(String) }],
     });
+    expect(json).toEqual(NO_EJECUTADA.tope);
+    expect(historial.at(-2)).toBe(mensaje);
+    expect(historial.at(-1)).toEqual({ role: "assistant", content: SIN_TERMINAR.usted });
+  });
+
+  it("max_tokens no ejecuta la herramienta cortada y cierra el turno con el texto de respaldo", async () => {
+    const { herramientas, todas } = preparar();
+    const agendar = usarHerramienta("toolu_1", "agendar_cita", { servicioId: "limpieza", inicio: MARTES_9, ...cliente });
+    const { cliente: falso, peticiones } = clienteFalso([respuesta([agendar], "max_tokens")]);
+
+    const resultado = await responder({
+      cliente: falso,
+      perfil: dental,
+      historialApi: [],
+      mensaje: "Agéndeme el martes a las 9",
+      herramientas,
+      config,
+    });
+
+    expect(peticiones).toHaveLength(1);
+    expect(await todas()).toEqual([]);
+    expect(resultado.texto).toBe(SIN_TERMINAR.usted);
+    const { mensaje, json } = ultimoToolResult(resultado.historialApi);
+    expect(mensaje).toEqual({
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "toolu_1", is_error: true, content: expect.any(String) }],
+    });
+    expect(json).toEqual(NO_EJECUTADA.cortada);
+    expect(resultado.historialApi).toEqual([
+      { role: "user", content: "Agéndeme el martes a las 9" },
+      { role: "assistant", content: [agendar] },
+      mensaje,
+      { role: "assistant", content: SIN_TERMINAR.usted },
+    ]);
+  });
+
+  it("los textos fijos siguen el trato del negocio", async () => {
+    for (const [perfil, trato] of [
+      [dental, "usted"],
+      [barberia, "tu"],
+    ] as const) {
+      const { herramientas } = preparar(perfil);
+      const turno = (guion: MensajeApi[]) =>
+        responder({ cliente: clienteFalso(guion).cliente, perfil, historialApi: [], mensaje: "Hola", herramientas, config });
+      expect((await turno([respuesta([], "refusal")])).texto, perfil.id).toBe(DISCULPA[trato]);
+      expect((await turno([respuesta([texto("Le cuento que")], "max_tokens")])).texto, perfil.id).toBe(SIN_TERMINAR[trato]);
+    }
   });
 
   it("refusal da el texto de disculpa", async () => {
@@ -394,11 +497,12 @@ describe("responder", () => {
     });
 
     expect(peticiones).toHaveLength(2);
-    expect(resultado).toMatchObject({ texto: DISCULPA, pasoAHumano: false });
+    expect(resultado).toMatchObject({ texto: DISCULPA.usted, pasoAHumano: false });
     expect(await todas()).toEqual([]); // una negativa puede cortar un tool_use a medias: no se ejecuta
-    // La respuesta negada no entra al historial; las vueltas anteriores sí, porque sus herramientas pudieron cambiar datos.
-    expect(resultado.historialApi).toEqual(peticiones[1].messages);
-    expect(resultado.historialApi).toHaveLength(historialPrevio.length + 3);
+    // La respuesta negada no entra al historial; las vueltas anteriores sí, porque sus herramientas pudieron cambiar datos,
+    // y el turno cierra con la disculpa que vio el visitante.
+    expect(resultado.historialApi).toEqual([...peticiones[1].messages, { role: "assistant", content: DISCULPA.usted }]);
+    expect(resultado.historialApi).toHaveLength(historialPrevio.length + 4);
 
     // Negada de entrada: el mensaje del visitante tampoco se guarda, para no repetir la negativa en cada turno.
     const deEntrada = clienteFalso([respuesta([], "refusal")]);
@@ -410,7 +514,7 @@ describe("responder", () => {
       herramientas,
       config,
     });
-    expect(negada).toMatchObject({ texto: DISCULPA, historialApi: historialPrevio, pasoAHumano: false });
+    expect(negada).toMatchObject({ texto: DISCULPA.usted, historialApi: historialPrevio, pasoAHumano: false });
   });
 
   it("responder manda model, effort, betas, fallbacks y cache_control según config", async () => {
@@ -427,7 +531,8 @@ describe("responder", () => {
         fallbacks: "default",
         cache_control: { type: "ephemeral" },
         tool_choice: { type: "auto" },
-        system: promptDelSistema(dental),
+        // Marca explícita al final del system: el prefijo herramientas + prompt del negocio se comparte entre conversaciones.
+        system: [{ type: "text", text: promptDelSistema(dental), cache_control: { type: "ephemeral" } }],
         tools: herramientas.definiciones,
         messages: [{ role: "user", content: "Hola" }],
       },

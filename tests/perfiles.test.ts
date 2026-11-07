@@ -29,6 +29,7 @@ describe("perfiles de ejemplo", () => {
       const p = obtenerPerfil(id);
       return {
         zona: p.zonaHoraria,
+        trato: p.trato,
         intervalo: p.politicas.intervaloMin,
         capacidad: p.politicas.capacidadPorHorario,
         horario: p.horario.map((h) => [h.dia, h.abre, h.cierra, h.descansos.map((d) => `${d.inicio}-${d.fin}`)]),
@@ -38,6 +39,7 @@ describe("perfiles de ejemplo", () => {
     const comida = ["14:00-15:00"];
     expect(resumen("dental")).toEqual({
       zona: "America/Mexico_City",
+      trato: "usted",
       intervalo: 30,
       capacidad: 1,
       horario: [
@@ -48,6 +50,7 @@ describe("perfiles de ejemplo", () => {
     });
     expect(resumen("barberia")).toEqual({
       zona: "America/Mexico_City",
+      trato: "tu",
       intervalo: 15,
       capacidad: 2,
       horario: [0, 2, 3, 4, 5, 6].map((dia) => [dia, "10:00", "20:00", []]),
@@ -55,6 +58,7 @@ describe("perfiles de ejemplo", () => {
     });
     expect(resumen("taller")).toEqual({
       zona: "America/Mexico_City",
+      trato: "tu",
       intervalo: 60,
       capacidad: 3,
       horario: [1, 2, 3, 4, 5, 6].map((dia) => [dia, "08:00", "18:00", []]),
@@ -86,6 +90,7 @@ describe("perfiles de ejemplo", () => {
     ["día repetido", (p) => { p.horario.push({ ...p.horario[0] }); }, "Día repetido"],
     ["servicio con id repetido", (p) => { p.servicios.push({ ...p.servicios[0] }); }, "Servicio con id repetido"],
     ["zona horaria inválida", (p) => { p.zonaHoraria = "Marte/Olympus"; }, "Zona horaria IANA inválida"],
+    ["trato que no es usted ni tu", (p) => { (p as { trato: string }).trato = "vos"; }, "El trato debe ser"],
   ])("esquemaPerfil rechaza: %s", (_, romper, mensaje) => {
     const perfil = structuredClone(obtenerPerfil("dental"));
     romper(perfil);

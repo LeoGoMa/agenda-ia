@@ -40,6 +40,7 @@ export const esquemaPerfil: z.ZodType<PerfilNegocio> = z.object({
   giro: texto,
   zonaHoraria: z.string().refine(zonaValida, "Zona horaria IANA inválida").default("America/Mexico_City"),
   tono: texto,
+  trato: z.enum(["usted", "tu"], { error: "El trato debe ser «usted» o «tu»" }),
   horario: z
     .array(esquemaHorarioDia)
     .refine((dias) => sinRepetir(dias.map((h) => h.dia)), "Día repetido en el horario"),

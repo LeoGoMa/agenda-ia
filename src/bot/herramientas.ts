@@ -102,12 +102,23 @@ export function crearHerramientas(ctx: ContextoHerramientas): Herramientas {
         fecha: z.iso.date({ error: "La fecha debe ser AAAA-MM-DD y existir en el calendario" }).describe("Fecha local, AAAA-MM-DD."),
       },
       async ({ servicioId, fecha }) => {
+        const momento = ahora();
+        // Fuera de [hoy, hoy + anticipacionMaxDias] (días locales) nunca hay horarios: se rechaza sin ir al repositorio.
+        const hoy = partesLocales(momento, perfil.zonaHoraria).fecha;
+        const { anticipacionMaxDias } = perfil.politicas;
+        const tope = new Date(Date.parse(`${hoy}T00:00:00Z`) + anticipacionMaxDias * DIA).toISOString().slice(0, 10);
+        if (fecha < hoy || fecha > tope) {
+          throw new ErrorDominio(
+            "FUERA_DE_POLITICA",
+            `Solo se puede consultar del ${hoy} al ${tope}: hoy y hasta ${anticipacionMaxDias} días adelante`,
+          );
+        }
         const dia = Date.parse(`${fecha}T00:00:00Z`);
         // Un día más por lado cubre cualquier desfase de zona y las citas que se enciman con el borde del día.
         const desde = new Date(dia - DIA).toISOString();
         const hasta = new Date(dia + 2 * DIA).toISOString();
         const citas = await repo.citas.listar(sesionId, perfil.id, desde, hasta);
-        const horarios = horariosLibres({ perfil, servicioId, fecha, citas, ahora: ahora() });
+        const horarios = horariosLibres({ perfil, servicioId, fecha, citas, ahora: momento });
         return { servicioId, fecha, dia: NOMBRE_DIA[new Date(dia).getUTCDay()], horarios };
       },
     ),

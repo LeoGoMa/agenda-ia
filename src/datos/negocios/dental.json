@@ -4,6 +4,7 @@
   "giro": "Consultorio dental",
   "zonaHoraria": "America/Mexico_City",
   "tono": "Cálido, profesional y tranquilizador. Habla de usted, explica sin tecnicismos y nunca da diagnósticos por chat.",
+  "trato": "usted",
   "horario": [
     { "dia": 1, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },
     { "dia": 2, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },

@@ -8,8 +8,18 @@ type MensajeApi = Anthropic.Beta.Messages.BetaMessageParam;
 
 const MAX_TOKENS = 4000;
 const MAX_VUELTAS = 6;
-const TEXTO_NEGATIVA = "Perdón, no puedo ayudarte con eso. ¿Quieres que te comunique con una persona?";
-const TEXTO_SIN_TERMINAR = "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repites o quieres que te comunique con una persona?";
+const TEXTOS: Record<PerfilNegocio["trato"], { negativa: string; sinTerminar: string }> = {
+  tu: {
+    negativa: "Perdón, no puedo ayudarte con eso. ¿Quieres que te comunique con una persona?",
+    sinTerminar: "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repites o quieres que te comunique con una persona?",
+  },
+  usted: {
+    negativa: "Perdón, no puedo ayudarle con eso. ¿Quiere que le comunique con una persona?",
+    sinTerminar: "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repite o quiere que le comunique con una persona?",
+  },
+};
+const NO_EJECUTADA_TOPE = `No se ejecutó: se llegó al tope de ${MAX_VUELTAS} vueltas de herramientas de este mensaje.`;
+const NO_EJECUTADA_CORTADA = "No se ejecutó: la respuesta se cortó antes de terminar.";
 
 /** Lo único que el bot usa del SDK; en las pruebas se inyecta uno falso. */
 export interface ClienteClaude {
@@ -68,6 +78,12 @@ export async function responder({
 }): Promise<RespuestaBot> {
   const mensajes: MensajeApi[] = [...(historialApi as MensajeApi[]), { role: "user", content: mensaje }];
   const uso = { entrada: 0, salida: 0, cacheLeida: 0 };
+  const textos = TEXTOS[perfil.trato];
+  // La marca explícita cachea herramientas + prompt, compartidos por todas las conversaciones del negocio;
+  // la de nivel superior cachea además la conversación que va creciendo.
+  const system: Anthropic.Beta.Messages.BetaTextBlockParam[] = [
+    { type: "text", text: promptDelSistema(perfil), cache_control: { type: "ephemeral" } },
+  ];
   let pasoAHumano = false;
   const terminar = (texto: string): RespuestaBot => ({ texto, historialApi: mensajes, pasoAHumano, uso });
 
@@ -80,7 +96,7 @@ export async function responder({
       fallbacks: "default",
       cache_control: { type: "ephemeral" },
       tool_choice: { type: "auto" },
-      system: promptDelSistema(perfil),
+      system,
       tools: herramientas.definiciones,
       messages: mensajes,
     });
@@ -90,35 +106,41 @@ export async function responder({
 
     // Se negó toda la cadena de modelos. La respuesta puede traer un tool_use cortado: ni se guarda ni se ejecuta.
     // Si se negó de entrada, tampoco se guarda el mensaje del visitante: reenviarlo en cada turno repetiría la negativa.
-    // Si ya hubo vueltas, se conservan, porque sus herramientas pudieron cambiar datos.
+    // Si ya hubo vueltas, se conservan, porque sus herramientas pudieron cambiar datos, y la disculpa cierra el turno
+    // para que el modelo vea lo mismo que el visitante.
     if (respuesta.stop_reason === "refusal") {
       if (vuelta === 1) mensajes.pop();
-      return terminar(TEXTO_NEGATIVA);
+      else mensajes.push({ role: "assistant", content: textos.negativa });
+      return terminar(textos.negativa);
     }
 
     mensajes.push({ role: "assistant", content: respuesta.content });
     const llamadas = respuesta.content.filter((b) => b.type === "tool_use");
 
     if (respuesta.stop_reason !== "tool_use" || vuelta === MAX_VUELTAS) {
+      const texto = respuesta.content
+        .filter((b) => b.type === "text")
+        .map((b) => b.text)
+        .join("\n\n")
+        .trim();
+      const visible = respuesta.stop_reason === "end_turn" && texto ? texto : textos.sinTerminar;
       // Sin otra vuelta nadie vería el resultado, así que no se ejecuta (no se agenda nada a ciegas);
-      // aun así cada tool_use necesita su tool_result o el siguiente mensaje da 400.
+      // aun así cada tool_use necesita su tool_result o el siguiente mensaje da 400. Después, el turno
+      // cierra con el texto que vio el visitante, para que el modelo tenga el mismo contexto.
       if (llamadas.length > 0) {
+        const motivo = respuesta.stop_reason === "tool_use" ? NO_EJECUTADA_TOPE : NO_EJECUTADA_CORTADA;
         mensajes.push({
           role: "user",
           content: llamadas.map((l) => ({
             type: "tool_result" as const,
             tool_use_id: l.id,
             is_error: true,
-            content: "No se ejecutó: la respuesta se cortó antes de terminar.",
+            content: JSON.stringify({ ok: false, codigo: "NO_EJECUTADA", mensaje: motivo }),
           })),
         });
+        mensajes.push({ role: "assistant", content: visible });
       }
-      const texto = respuesta.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text)
-        .join("\n\n")
-        .trim();
-      return terminar(respuesta.stop_reason === "end_turn" && texto ? texto : TEXTO_SIN_TERMINAR);
+      return terminar(visible);
     }
 
     const resultados: Anthropic.Beta.Messages.BetaToolResultBlockParam[] = [];

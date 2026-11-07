@@ -37,6 +37,8 @@ export interface PerfilNegocio {
   /** Zona IANA, por ejemplo "America/Mexico_City". */
   zonaHoraria: string;
   tono: string;
+  /** Cómo se le habla al cliente en los textos fijos (disculpas, límites, avisos). */
+  trato: "usted" | "tu";
   horario: HorarioDia[];
   servicios: Servicio[];
   politicas: Politicas;
