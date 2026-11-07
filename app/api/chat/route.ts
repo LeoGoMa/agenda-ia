@@ -4,6 +4,9 @@ import { conSesion, cuerpoDe, ipDe, solicitudInvalida } from "@/src/web/rutas";
 
 const esquema = z.object({ negocioId: z.string(), texto: z.string() });
 
+/** Segundos: un mensaje puede llevar hasta 6 vueltas de herramientas con Claude. */
+export const maxDuration = 60;
+
 /** Un mensaje del visitante. Responde `{ respuesta, modo }` con 200, 400 o 429. */
 export async function POST(peticion: Request) {
   return conSesion(peticion, "POST /api/chat", async (sesionId, deps) => {

@@ -1,7 +1,7 @@
 import { inspect } from "node:util";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { POST as chat } from "@/app/api/chat/route";
+import { POST as chat, maxDuration as duracionChat } from "@/app/api/chat/route";
 import { GET as limpieza } from "@/app/api/limpieza/route";
 import { POST as panelMensaje } from "@/app/api/panel/mensaje/route";
 import { POST as panelModo } from "@/app/api/panel/modo/route";
@@ -255,6 +255,10 @@ describe("sesión por cookie", () => {
 });
 
 describe("rutas del chat y el panel", () => {
+  it("el chat puede tardar hasta 60 s: varias vueltas de herramientas con Claude", () => {
+    expect(duracionChat).toBe(60);
+  });
+
   it("flujo completo con el responder de demostración: saluda, agenda, la cita sale en el panel y pasa a humano", async () => {
     const ana = visitante();
     expect(await ana.escribir("Hola")).toEqual({ estado: 200, cuerpo: { respuesta: expect.stringContaining(MARCA_DEMO), modo: "bot" } });
