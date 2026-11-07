@@ -1,4 +1,4 @@
-import type { Cita } from "../dominio/tipos";
+import type { Cita, PerfilNegocio } from "../dominio/tipos";
 import type { Conversacion } from "../repo/tipos";
 import { textoDeAviso } from "./formato";
 
@@ -11,6 +11,7 @@ export interface PerfilVista {
   giro: string;
   zonaHoraria: string;
   servicios: { id: string; nombre: string }[];
+  trato: PerfilNegocio["trato"];
 }
 
 /** Lo que devuelve GET /api/panel. */

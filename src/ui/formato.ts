@@ -1,5 +1,6 @@
 import { MARCA_DEMO } from "../bot/responderDev";
 import { partesLocales } from "../dominio/tiempo";
+import type { PerfilNegocio } from "../dominio/tipos";
 import type { Conversacion } from "../repo/tipos";
 
 const DIA = 24 * 60 * 60_000;
@@ -54,6 +55,10 @@ export function textoDeAviso(cuerpo: unknown): string {
   if (typeof error === "string" && error) return error;
   return GENERICO;
 }
+
+/** El aviso de privacidad que va siempre junto al campo del chat, en el trato del negocio. */
+export const avisoPrivacidad = (trato: PerfilNegocio["trato"]) =>
+  `${trato === "usted" ? "Use" : "Usa"} nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.`;
 
 /** «1 cita», «27 citas», «1,284 mensajes»: una sola regla de singular y plural para todo lo que se cuenta. */
 export const contar = (n: number, singular: string, plural: string) =>

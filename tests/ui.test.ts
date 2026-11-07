@@ -3,6 +3,7 @@ import { MARCA_DEMO } from "@/src/bot/responderDev";
 import { crearRefresco } from "@/src/ui/api";
 import {
   agruparPorDia,
+  avisoPrivacidad,
   contar,
   ETIQUETA_MODO,
   etiquetaHora,
@@ -148,6 +149,17 @@ describe("crearRefresco (el sondeo del panel)", () => {
     await expect(sondear()).rejects.toThrow("sin red");
     await sondear();
     expect(aplicar).toHaveBeenCalledWith("datos");
+  });
+});
+
+describe("avisoPrivacidad", () => {
+  it("pide datos inventados y dice quién procesa los mensajes y cuándo se borran, en el trato del negocio", () => {
+    expect(avisoPrivacidad("tu")).toBe(
+      "Usa nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.",
+    );
+    expect(avisoPrivacidad("usted")).toBe(
+      "Use nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.",
+    );
   });
 });
 

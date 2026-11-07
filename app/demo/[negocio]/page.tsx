@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: PageProps<"/demo/[negocio]">)
 export default async function PaginaDemo({ params }: PageProps<"/demo/[negocio]">) {
   const perfil = await perfilDe(params);
   if (!perfil) notFound();
-  const { id, nombre, giro, zonaHoraria, servicios } = perfil;
+  const { id, nombre, giro, zonaHoraria, servicios, trato } = perfil;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -43,7 +43,7 @@ export default async function PaginaDemo({ params }: PageProps<"/demo/[negocio]"
         </div>
       </header>
       {/* Al cliente solo va lo que se muestra del perfil (sin políticas, precios ni preguntas frecuentes). */}
-      <Demo perfil={{ id, nombre, giro, zonaHoraria, servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre })) }} />
+      <Demo perfil={{ id, nombre, giro, zonaHoraria, trato, servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre })) }} />
     </main>
   );
 }

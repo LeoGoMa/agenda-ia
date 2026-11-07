@@ -4,7 +4,7 @@ import { memo, useEffect, useId, useRef, useState, type FormEvent } from "react"
 import type { MensajeVisible } from "../repo/tipos";
 import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { EnlacesForge } from "./AvisoFicticio";
-import { etiquetaHora, separarMarcaDemo } from "./formato";
+import { avisoPrivacidad, etiquetaHora, separarMarcaDemo } from "./formato";
 
 /** Frases que entienden Claude y el responder de demostración sin IA. */
 const SUGERENCIAS = ["¿Qué horarios tienen?", "Quiero agendar una cita", "Quiero hablar con una persona"];
@@ -88,6 +88,7 @@ export function Chat({
   const lista = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLInputElement>(null);
   const idCampo = useId();
+  const idPrivacidad = useId();
 
   const mensajes = conversacion?.mensajes ?? [];
   const enHumano = conversacion?.modo === "humano";
@@ -204,7 +205,7 @@ export function Chat({
         </ol>
       </div>
 
-      <form onSubmit={alEnviar} className="flex shrink-0 items-center gap-2 px-3 pt-1 pb-3">
+      <form onSubmit={alEnviar} className="flex shrink-0 items-center gap-2 px-3 pt-1 pb-1.5">
         <label htmlFor={idCampo} className="sr-only">
           Mensaje para {perfil.nombre}
         </label>
@@ -218,6 +219,7 @@ export function Chat({
           maxLength={1000}
           autoComplete="off"
           enterKeyHint="send"
+          aria-describedby={idPrivacidad}
           placeholder="Escribe un mensaje…"
           className="min-h-11 min-w-0 flex-1 rounded-full bg-white px-4 text-[1rem] shadow-sm placeholder:text-stone-500 disabled:bg-stone-100"
         />
@@ -232,6 +234,10 @@ export function Chat({
           </svg>
         </button>
       </form>
+      {/* Siempre a la vista bajo el campo; tenue sobre el fondo del chat da 6:1 (AA). */}
+      <p id={idPrivacidad} className="shrink-0 px-4 pb-3 text-center text-xs leading-snug text-tenue">
+        {avisoPrivacidad(perfil.trato)}
+      </p>
     </section>
   );
 }
