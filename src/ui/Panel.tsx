@@ -2,8 +2,8 @@
 
 import { useId, useState, type FormEvent } from "react";
 import type { MensajeVisible } from "../repo/tipos";
+import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { EnlacesForge } from "./AvisoFicticio";
-import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./Demo";
 import { agruparPorDia, contarCitas, ETIQUETA_ESTADO, ETIQUETA_MODO, etiquetaHora, formatoTelefono, separarMarcaDemo } from "./formato";
 
 type ConversacionVista = DatosPanel["conversaciones"][number];

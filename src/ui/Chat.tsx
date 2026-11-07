@@ -2,8 +2,8 @@
 
 import { memo, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { MensajeVisible } from "../repo/tipos";
+import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { EnlacesForge } from "./AvisoFicticio";
-import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./Demo";
 import { etiquetaHora, separarMarcaDemo } from "./formato";
 
 /** Frases que entienden Claude y el responder de demostración sin IA. */
