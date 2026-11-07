@@ -55,6 +55,13 @@ function textoValido(texto: unknown): string | null {
   return largo >= 1 && largo <= MAX_CARACTERES ? limpio : null;
 }
 
+/** Con esta marca entran al historial de la API las respuestas de la persona del negocio (`mensajeHumano`). */
+const MARCA_PERSONA = "[Respuesta de una persona del negocio]";
+const MARCA_EN_TEXTO = /\[(\s*respuesta de una persona del negocio\s*)\]/gi;
+
+/** El texto del visitante con la marca de la persona del negocio cambiada a paréntesis: así no se hace pasar por ella. */
+const sinMarcaPersona = (texto: string) => texto.replace(MARCA_EN_TEXTO, "($1)");
+
 /** Visitante y persona del negocio comparten el tope por conversación: los dos hacen crecer el historial. */
 const mensajesConversacion = (conv: Conversacion) => conv.mensajes.filter((m) => m.rol === "cliente" || m.rol === "humano").length;
 
@@ -114,16 +121,18 @@ export async function manejarMensaje(
   if (!limite.permitido) return { estado: 429, respuesta: textos.limite, modo: conv.modo };
 
   const mensajeCliente = { rol: "cliente" as const, texto: limpio, creadoEn: ahora().toISOString() };
+  // El mensaje visible queda como lo escribió; al modelo le llega sin la marca de la persona del negocio.
+  const paraApi = sinMarcaPersona(limpio);
   if (conv.modo === "humano") {
     await repo.conversaciones.agregarMensaje(sesionId, conv.id, mensajeCliente);
     // También va al historial de la API, para que el bot tenga el contexto si le regresan la conversación.
-    const historial = [...conv.historialApi, { role: "user", content: limpio }];
+    const historial = [...conv.historialApi, { role: "user", content: paraApi }];
     await repo.conversaciones.guardarHistorialApi(sesionId, conv.id, historial, conv.versionPrompt);
     return { estado: 200, respuesta: textos.enEspera, modo: "humano" };
   }
 
   await repo.conversaciones.agregarMensaje(sesionId, conv.id, mensajeCliente);
-  const bot = await deps.responder({ perfil, historialApi, mensaje: limpio, herramientas });
+  const bot = await deps.responder({ perfil, historialApi, mensaje: paraApi, herramientas });
   // shortcut: cada petición (aquí y en `mensajeHumano`) lee la conversación al inicio y al final reemplaza el historial
   // de la API, sin candado. Carreras conocidas: (1) en modo bot, un doble clic, mensajes en paralelo o una persona que
   // escribe desde el panel mientras el bot contesta: el último en guardar pisa al otro en historialApi (los mensajes
@@ -161,7 +170,7 @@ export async function mensajeHumano(
 
   await repo.conversaciones.agregarMensaje(sesionId, conv.id, { rol: "humano", texto: limpio, creadoEn: ahora().toISOString() });
   // Va como mensaje `user` marcado: el bot conserva el contexto si le regresan la conversación.
-  const historial = [...conv.historialApi, { role: "user", content: `[Respuesta de una persona del negocio]: ${limpio}` }];
+  const historial = [...conv.historialApi, { role: "user", content: `${MARCA_PERSONA}: ${limpio}` }];
   await repo.conversaciones.guardarHistorialApi(sesionId, conv.id, historial, conv.versionPrompt);
   return { estado: 200 };
 }
