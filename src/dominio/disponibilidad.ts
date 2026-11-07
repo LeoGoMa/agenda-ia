@@ -15,6 +15,16 @@ const esFecha = (fecha: string) => {
 };
 
 /**
+ * Regla única de choque (también la usan los repositorios): cuántas citas confirmadas se enciman
+ * con [inicio, fin) en milisegundos. Los intervalos son semiabiertos: tocar el borde no choca.
+ */
+export function encimadas(citas: Cita[], inicio: number, fin: number): number {
+  // Escrito como negación para que una fecha inválida (NaN) cuente como encimada: falla cerrado.
+  const choca = (c: Cita) => !(Date.parse(c.fin) <= inicio || Date.parse(c.inicio) >= fin);
+  return citas.filter((c) => c.estado === "confirmada" && choca(c)).length;
+}
+
+/**
  * Horarios en que cabe el servicio en la fecha local `fecha` ("YYYY-MM-DD") del negocio.
  * `inicio` va en ISO UTC y `etiqueta` en "HH:MM" local.
  */
@@ -42,7 +52,7 @@ export function horariosLibres({
   const desde = ahora.getTime() + anticipacionMinMin * MINUTO;
   const hasta = ahora.getTime() + anticipacionMaxDias * DIA;
   const duracion = servicio.duracionMin;
-  const confirmadas = citas.filter((c) => c.estado === "confirmada" && c.negocioId === perfil.id);
+  const delNegocio = citas.filter((c) => c.negocioId === perfil.id);
   const libres: { inicio: string; etiqueta: string }[] = [];
 
   for (let m = aMinutos(horario.abre); m + duracion <= aMinutos(horario.cierra); m += intervaloMin) {
@@ -53,10 +63,7 @@ export function horariosLibres({
     // Con `ahora` inválido, desde y hasta son NaN y la negación descarta el horario.
     if (!(inicio >= desde && inicio <= hasta)) continue;
 
-    const fin = inicio + duracion * MINUTO;
-    // Escrito como negación para que una fecha inválida (NaN) cuente como encimada: falla cerrado.
-    const encimadas = confirmadas.filter((c) => !(Date.parse(c.fin) <= inicio || Date.parse(c.inicio) >= fin)).length;
-    if (encimadas >= capacidadPorHorario) continue;
+    if (encimadas(delNegocio, inicio, inicio + duracion * MINUTO) >= capacidadPorHorario) continue;
 
     libres.push({ inicio: new Date(inicio).toISOString(), etiqueta });
   }
