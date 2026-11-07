@@ -150,7 +150,15 @@ export function Chat({
         </div>
       </header>
 
-      <div ref={lista} role="log" aria-live="polite" aria-label="Mensajes" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
+      <div
+        ref={lista}
+        role="log"
+        aria-live="polite"
+        aria-label="Mensajes"
+        // Mientras carga o espera la respuesta, el lector de pantalla no anuncia los cambios a medias.
+        aria-busy={(cargando && !avisoCarga) || enviando}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4"
+      >
         {cargando && !avisoCarga ? (
           <p className="pt-8 text-center text-sm text-tenue">Cargando la conversación…</p>
         ) : !cargando && mensajes.length === 0 && !mostrarPendiente ? (
@@ -180,9 +188,9 @@ export function Chat({
             <Burbuja key={i} mensaje={m} zona={perfil.zonaHoraria} />
           ))}
           {mostrarPendiente ? (
-            <li className="flex justify-end">
+            // Solo a la vista: el lector de pantalla lo anuncia una vez, cuando llega del servidor.
+            <li aria-hidden="true" className="flex justify-end">
               <p className="max-w-[85%] rounded-2xl rounded-br-md bg-saliente/70 px-3 py-2 text-[0.9375rem] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]">
-                <span className="sr-only">Tú, enviando: </span>
                 {pendiente?.texto}
               </p>
             </li>
