@@ -31,6 +31,8 @@ export interface DepsChat {
   repo: Repositorio;
   limitador: Limitador;
   responder: Responder;
+  /** El modelo efectivo de Claude: entra en la versión del historial. */
+  modelo: string;
   ahora: () => Date;
 }
 
@@ -66,11 +68,11 @@ const sinMarcaPersona = (texto: string) => texto.replace(MARCA_EN_TEXTO, "($1)")
 const mensajesConversacion = (conv: Conversacion) => conv.mensajes.filter((m) => m.rol === "cliente" || m.rol === "humano").length;
 
 /**
- * Cambia si se edita el perfil o una herramienta y se redespliega. Un historial armado con otra versión
- * no se reenvía: sus bloques de pensamiento van atados al prompt con que se generaron.
+ * Cambia si se edita el perfil o una herramienta, o cambia el modelo, y se redespliega. Un historial armado con otra
+ * versión no se reenvía: sus bloques de pensamiento van atados al prompt y al modelo con que se generaron.
  */
-function versionPrompt(perfil: PerfilNegocio, definiciones: Anthropic.Beta.BetaTool[]): string {
-  return createHash("sha256").update(JSON.stringify([promptDelSistema(perfil), definiciones])).digest("hex");
+function versionPrompt(perfil: PerfilNegocio, definiciones: Anthropic.Beta.BetaTool[], modelo: string): string {
+  return createHash("sha256").update(JSON.stringify([promptDelSistema(perfil), definiciones, modelo])).digest("hex");
 }
 
 /**
@@ -103,7 +105,7 @@ export async function manejarMensaje(
     // El modo cambia al final, con `pasoAHumano` y junto con el historial: si el turno falla, no queda a medias.
     alPasarAHumano: async () => {},
   });
-  const version = versionPrompt(perfil, herramientas.definiciones);
+  const version = versionPrompt(perfil, herramientas.definiciones, deps.modelo);
   // Sin versión, el historial solo trae texto del modo humano, que se puede reenviar con cualquier prompt.
   const historialApi = conv.versionPrompt === null || conv.versionPrompt === version ? conv.historialApi : [];
   // Antes del limitador: un 429 por tamaño no gasta los contadores de sesión e IP.

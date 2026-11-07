@@ -50,10 +50,12 @@ export interface ConfigBot {
   esfuerzo: z.infer<typeof esquemaEsfuerzo>;
 }
 
-/** `||` y no `??`: una variable vacía, como las de `.env.example`, cuenta como no definida. */
+/** El modelo efectivo. `||` y no `??`: una variable vacía, como las de `.env.example`, cuenta como no definida. */
+export const modeloDesdeEntorno = (env: Record<string, string | undefined> = process.env) => env.ANTHROPIC_MODEL || "claude-opus-5-5";
+
 export function configDesdeEntorno(env: Record<string, string | undefined> = process.env): ConfigBot {
   return {
-    modelo: env.ANTHROPIC_MODEL || "claude-opus-5-5",
+    modelo: modeloDesdeEntorno(env),
     esfuerzo: esquemaEsfuerzo.parse(env.AGENDA_EFFORT || "low"),
   };
 }

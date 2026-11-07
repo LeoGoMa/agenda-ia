@@ -57,6 +57,7 @@ const preparar = ({ limites = {}, negocioId = "dental" }: { limites?: Partial<Co
     repo,
     limitador: crearLimitador(almacenMemoria(), { ...POR_DEFECTO, ...limites }),
     responder,
+    modelo: "claude-opus-5-5",
     ahora: () => ahora,
   };
   const sesionId = crypto.randomUUID();
@@ -490,6 +491,18 @@ describe("manejarMensaje", () => {
     await repo.conversaciones.guardarHistorialApi(sesionId, id, historialDe(120_001), "version-anterior");
     expect((await enviar("¿Y ahora?")).estado).toBe(200); // sesión: 3 de 3
     expect(responder.mock.calls[2][0].historialApi).toEqual([]);
+  });
+
+  it("la versión del historial incluye el modelo: con otro modelo arranca un historial nuevo", async () => {
+    const { deps, enviar, responder, conversacion } = preparar();
+    await enviar("Hola");
+    const antes = await conversacion();
+    deps.modelo = "otro-modelo"; // como un redespliegue con otro ANTHROPIC_MODEL
+    await enviar("¿Siguen ahí?");
+    expect(responder.mock.calls[1][0].historialApi).toEqual([]);
+    const despues = await conversacion();
+    expect(despues.versionPrompt).toMatch(/^[0-9a-f]{64}$/);
+    expect(despues.versionPrompt).not.toBe(antes.versionPrompt);
   });
 
   it("un historial sin versión (solo texto del modo humano) se conserva al volver al bot", async () => {

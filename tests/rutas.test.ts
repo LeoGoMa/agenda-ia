@@ -117,6 +117,12 @@ describe("deps", () => {
     expect(armarDeps({ NODE_ENV: "test", ANTHROPIC_API_KEY: "llave-de-prueba" }).responder).not.toBe(responderDev);
   });
 
+  it("el modelo efectivo (para la versión del historial) es ANTHROPIC_MODEL o el de por defecto", () => {
+    expect(armarDeps({ NODE_ENV: "test" }).modelo).toBe("claude-opus-5-5");
+    expect(armarDeps({ NODE_ENV: "test", ANTHROPIC_MODEL: "" }).modelo).toBe("claude-opus-5-5");
+    expect(armarDeps({ NODE_ENV: "test", ANTHROPIC_MODEL: "claude-haiku-5-5" }).modelo).toBe("claude-haiku-5-5");
+  });
+
   it("en producción exige Supabase, la llave de Claude y la sal de la IP, con un error claro", () => {
     const completo = {
       NODE_ENV: "production",

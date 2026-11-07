@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
-import { configDesdeEntorno, responder as responderClaude } from "../bot/responder";
+import { configDesdeEntorno, modeloDesdeEntorno, responder as responderClaude } from "../bot/responder";
 import { responderDev } from "../bot/responderDev";
 import { crearRepoMemoria } from "../repo/memoria";
 import { crearRepoSupabase } from "../repo/supabase";
@@ -110,6 +110,7 @@ export function armarDeps(env: Entorno = process.env): Deps {
     },
     limitador,
     responder,
+    modelo: modeloDesdeEntorno(env),
     ahora,
   };
 }
