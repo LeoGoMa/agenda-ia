@@ -4,7 +4,7 @@ Cómo está hecho por dentro: las capas, el camino de un mensaje y las reglas qu
 
 ## Capas
 
-Cada capa solo conoce a la de abajo. El dominio no sabe de la base de datos, el bot no sabe de HTTP y la interfaz no sabe de Claude.
+Cada capa solo depende de las de abajo. El dominio no sabe de la base de datos (solo usa la interfaz del repositorio), el bot no sabe de HTTP y la interfaz no sabe de Claude.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐

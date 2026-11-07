@@ -10,7 +10,7 @@ Businesses that work by appointment lose bookings when nobody answers the chat i
 
 ![Agenda IA demo on desktop: the customer chat on the left and the business panel on the right](docs/img/demo-escritorio.png)
 
-_The customer chats on the left; the business panel is on the right. In this conversation the bot booked a slot, then passed the chat to a person, who replied from the panel. These screenshots were taken locally without an API key, so the replies come from the scripted demo responder (the «demo sin IA» badge). With `ANTHROPIC_API_KEY` set, Claude writes them._
+_The customer chats on the left; the business panel is on the right. In this conversation the bot booked a slot, then passed the chat to a person, who replied from the panel. These screenshots were taken in test mode, without the AI connected, so the bot's replies are pre-written (that's the «demo sin IA» badge, "demo without AI"). In the live demo, Claude writes them._
 
 ## What it does for a business
 
@@ -23,7 +23,7 @@ _The customer chats on the left; the business panel is on the right. In this con
 ### Try it in one minute
 
 1. On the home page, pick one of the three businesses.
-2. Write as if you were a customer, for example "Do you have anything tomorrow afternoon?". The demo replies in Spanish, like the businesses it represents.
+2. Write as if you were a customer, for example «¿Tienen algo mañana en la tarde?» ("Do you have anything tomorrow afternoon?"). The bot answers in Spanish, like the Mexican businesses it represents.
 3. Next to the chat (or in the **Panel** tab on a phone) is what the business sees: the upcoming appointments, a few fictional ones already booked, and your conversation. Press **Tomar el chat** ("Take over the chat") to reply as the business.
 
 To keep costs under control, the demo limits how many messages you can send per hour, and it tells you when you reach a limit.
@@ -31,6 +31,8 @@ To keep costs under control, the demo limits how many messages you can send per 
 ![The home page with the three fictional businesses](docs/img/inicio.png)
 
 <img src="docs/img/celular-chat.png" alt="The chat on a phone, with Chat and Panel tabs" width="300">
+
+Today it runs as a web chat; connecting it to WhatsApp is the next phase.
 
 Agenda IA is a portfolio project by **Forge Studio**. Want one for your business? Get in touch through the [Forge Studio website](https://leogoma.github.io/forge-studio/) or on [Instagram](https://www.instagram.com/forgestudio.work.ai/).
 
@@ -42,7 +44,7 @@ The code, comments and UI are in Spanish (the demo targets Mexican businesses). 
 
 ### Architecture
 
-Each layer only knows the one below it. The AI never writes to the database: it calls tools, and the tools go through the domain rules.
+Each layer only depends on the layers below it. The AI never writes to the database: it calls tools, and the tools go through the domain rules.
 
 ```
 Browser            src/ui/, app/          chat + business panel (the panel is polled every 4 s)

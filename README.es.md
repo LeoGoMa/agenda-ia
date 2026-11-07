@@ -10,7 +10,7 @@ Los negocios que trabajan con citas pierden clientes cuando nadie contesta el ch
 
 ![Demo de Agenda IA en escritorio: el chat del cliente a la izquierda y el panel del negocio a la derecha](docs/img/demo-escritorio.png)
 
-_A la izquierda escribe el cliente; a la derecha está el panel del negocio. En esta conversación el bot agendó una cita y luego pasó el chat a una persona, que contestó desde el panel. Las capturas se tomaron en local sin llave de API, así que las respuestas son del responder de demostración (la etiqueta «demo sin IA»). Con `ANTHROPIC_API_KEY` las escribe Claude._
+_A la izquierda escribe el cliente; a la derecha está el panel del negocio. En esta conversación el bot agendó una cita y luego pasó el chat a una persona, que contestó desde el panel. Las capturas se tomaron en modo de prueba, sin la IA conectada, así que las respuestas del bot son textos fijos (por eso la etiqueta «demo sin IA»). En la demo en vivo las escribe Claude._
 
 ## Lo que hace por un negocio
 
@@ -32,6 +32,8 @@ Para cuidar el gasto, la demo limita cuántos mensajes puedes mandar por hora y 
 
 <img src="docs/img/celular-chat.png" alt="El chat en el celular, con las pestañas Chat y Panel" width="300">
 
+Hoy funciona como chat web; conectarlo a WhatsApp es la siguiente fase.
+
 Agenda IA es un proyecto de portafolio de **Forge Studio**. ¿Quieres uno para tu negocio? Escríbenos desde el [sitio de Forge Studio](https://leogoma.github.io/forge-studio/) o por [Instagram](https://www.instagram.com/forgestudio.work.ai/).
 
 ---
@@ -40,7 +42,7 @@ Agenda IA es un proyecto de portafolio de **Forge Studio**. ¿Quieres uno para t
 
 ### Arquitectura
 
-Cada capa solo conoce a la de abajo. La IA nunca escribe en la base de datos: llama herramientas, y las herramientas pasan por las reglas del dominio.
+Cada capa solo depende de las de abajo. La IA nunca escribe en la base de datos: llama herramientas, y las herramientas pasan por las reglas del dominio.
 
 ```
 Navegador          src/ui/, app/          chat y panel del negocio (el panel se pide cada 4 s)
