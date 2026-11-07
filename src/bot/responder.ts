@@ -18,8 +18,19 @@ const TEXTOS: Record<PerfilNegocio["trato"], { negativa: string; sinTerminar: st
     sinTerminar: "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repite o quiere que le comunique con una persona?",
   },
 };
+/** Herramientas que se ejecutan en una sola vuelta; cada una puede ir a la base. */
+const MAX_HERRAMIENTAS_POR_VUELTA = 4;
 const NO_EJECUTADA_TOPE = `No se ejecutó: se llegó al tope de ${MAX_VUELTAS} vueltas de herramientas de este mensaje.`;
 const NO_EJECUTADA_CORTADA = "No se ejecutó: la respuesta se cortó antes de terminar.";
+const NO_EJECUTADA_DEMASIADAS = "Demasiadas consultas en una sola vuelta; pide menos a la vez.";
+
+/** El tool_result de una herramienta que no se ejecutó: cada tool_use necesita el suyo o el siguiente mensaje da 400. */
+const noEjecutada = (toolUseId: string, mensaje: string): Anthropic.Beta.Messages.BetaToolResultBlockParam => ({
+  type: "tool_result",
+  tool_use_id: toolUseId,
+  is_error: true,
+  content: JSON.stringify({ ok: false, codigo: "NO_EJECUTADA", mensaje }),
+});
 
 /** Lo único que el bot usa del SDK; en las pruebas se inyecta uno falso. */
 export interface ClienteClaude {
@@ -59,7 +70,7 @@ export interface RespuestaBot {
 /**
  * Contesta un mensaje del visitante con un bucle manual de herramientas: hasta `end_turn`,
  * `refusal` o 6 llamadas a la API. Cada respuesta del asistente se guarda con su `content` completo
- * y sus herramientas se contestan en un solo mensaje `user`.
+ * y sus herramientas (a lo más 4 ejecutadas por vuelta) se contestan en un solo mensaje `user`.
  */
 export async function responder({
   cliente,
@@ -127,19 +138,10 @@ export async function responder({
         .join("\n\n")
         .trim();
       const visible = respuesta.stop_reason === "end_turn" && texto ? texto : textos.sinTerminar;
-      // Sin otra vuelta nadie vería el resultado, así que no se ejecuta (no se agenda nada a ciegas);
-      // aun así cada tool_use necesita su tool_result o el siguiente mensaje da 400.
+      // Sin otra vuelta nadie vería el resultado, así que no se ejecuta (no se agenda nada a ciegas).
       if (llamadas.length > 0) {
         const motivo = respuesta.stop_reason === "tool_use" ? NO_EJECUTADA_TOPE : NO_EJECUTADA_CORTADA;
-        mensajes.push({
-          role: "user",
-          content: llamadas.map((l) => ({
-            type: "tool_result" as const,
-            tool_use_id: l.id,
-            is_error: true,
-            content: JSON.stringify({ ok: false, codigo: "NO_EJECUTADA", mensaje: motivo }),
-          })),
-        });
+        mensajes.push({ role: "user", content: llamadas.map((l) => noEjecutada(l.id, motivo)) });
       }
       // Respaldo, end_turn sin texto o max_tokens: el visitante vio otro texto que el del modelo.
       if (llamadas.length > 0 || visible !== texto) cerrarCon(visible);
@@ -147,7 +149,11 @@ export async function responder({
     }
 
     const resultados: Anthropic.Beta.Messages.BetaToolResultBlockParam[] = [];
-    for (const llamada of llamadas) {
+    for (const [i, llamada] of llamadas.entries()) {
+      if (i >= MAX_HERRAMIENTAS_POR_VUELTA) {
+        resultados.push(noEjecutada(llamada.id, NO_EJECUTADA_DEMASIADAS));
+        continue;
+      }
       const { contenido, esError } = await herramientas.ejecutar(llamada.name, llamada.input);
       if (llamada.name === "pasar_a_humano" && !esError) pasoAHumano = true;
       resultados.push({ type: "tool_result", tool_use_id: llamada.id, is_error: esError, content: contenido });

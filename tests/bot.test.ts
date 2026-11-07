@@ -437,6 +437,38 @@ describe("responder", () => {
     expect(historial.at(-1)).toEqual(cierre(SIN_TERMINAR.usted));
   });
 
+  it("ejecuta a lo más 4 herramientas por vuelta; las demás reciben NO_EJECUTADA como error", async () => {
+    const { herramientas, todas, alPasarAHumano } = preparar();
+    const ejecutar = vi.spyOn(herramientas, "ejecutar");
+    const fecha = (id: string) => usarHerramienta(id, "obtener_fecha_hora", {});
+    const agendar = usarHerramienta("toolu_5", "agendar_cita", { servicioId: "limpieza", inicio: MARTES_9, ...cliente });
+    const humano = usarHerramienta("toolu_6", "pasar_a_humano", { motivo: "Lo pidió el cliente" });
+    const { cliente: falso, peticiones } = clienteFalso([
+      respuesta([fecha("toolu_1"), fecha("toolu_2"), fecha("toolu_3"), fecha("toolu_4"), agendar, humano], "tool_use"),
+      respuesta([texto("Hoy es lunes.")], "end_turn"),
+    ]);
+
+    const resultado = await responder({ cliente: falso, perfil: dental, historialApi: [], mensaje: "Hola", herramientas, config });
+
+    expect(ejecutar.mock.calls.map(([nombre]) => nombre)).toEqual(Array(4).fill("obtener_fecha_hora"));
+    expect(await todas()).toEqual([]);
+    expect(alPasarAHumano).not.toHaveBeenCalled();
+    expect(resultado).toMatchObject({ texto: "Hoy es lunes.", pasoAHumano: false });
+    // Cada tool_use tiene su tool_result, en el mismo orden y en un solo mensaje.
+    const resultados = (resultado.historialApi as MensajeParam[])[2].content as Anthropic.Beta.Messages.BetaToolResultBlockParam[];
+    expect(resultados.map((r) => [r.tool_use_id, r.is_error])).toEqual([
+      ["toolu_1", false],
+      ["toolu_2", false],
+      ["toolu_3", false],
+      ["toolu_4", false],
+      ["toolu_5", true],
+      ["toolu_6", true],
+    ]);
+    const demasiadas = { ok: false, codigo: "NO_EJECUTADA", mensaje: "Demasiadas consultas en una sola vuelta; pide menos a la vez." };
+    expect(resultados.slice(4).map((r) => JSON.parse(String(r.content)))).toEqual([demasiadas, demasiadas]);
+    expect(peticiones).toHaveLength(2);
+  });
+
   it("max_tokens no ejecuta la herramienta cortada y cierra el turno con el texto de respaldo", async () => {
     const { herramientas, todas } = preparar();
     const agendar = usarHerramienta("toolu_1", "agendar_cita", { servicioId: "limpieza", inicio: MARTES_9, ...cliente });
