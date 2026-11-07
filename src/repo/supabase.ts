@@ -71,7 +71,8 @@ function deLaRpc(error: PostgrestError, citaId: string): Error {
 
 /**
  * Repositorio de producción. La regla de choque y su atomicidad viven en las funciones de Postgres
- * `crear_cita_si_cabe` y `actualizar_cita_si_cabe`. Las filas de `sesiones` las crea quien pone la cookie.
+ * `crear_cita_si_cabe` y `actualizar_cita_si_cabe`. Las filas de `sesiones` las crea cada ruta antes de usar
+ * el repositorio (`asegurarSesion` en servicio/deps.ts).
  * El cliente debe usar la service role: las tablas tienen RLS sin políticas.
  */
 export function crearRepoSupabase(cliente: SupabaseClient): Repositorio {
