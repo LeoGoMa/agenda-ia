@@ -11,17 +11,24 @@ const AUTOR: Record<MensajeVisible["rol"], string> = { cliente: "Cliente", bot: 
 const boton =
   "min-h-11 rounded-lg px-4 text-sm font-semibold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed aria-disabled:opacity-60 aria-disabled:cursor-not-allowed";
 
-/** Texto del resultado de una acción del panel; el 429 trae además la salida a Forge Studio. */
+/**
+ * Texto del resultado de una acción del panel; el 429 trae además la salida a Forge Studio. La región está
+ * siempre en el DOM, aun vacía: si aparece junto con su texto, el lector de pantalla puede no anunciarlo.
+ */
 function AvisoAccion({ resultado }: { resultado: Resultado | null }) {
   return (
-    <p role="status" className="text-sm text-amber-900 empty:hidden">
-      {resultado && !resultado.ok ? resultado.texto : null}
-      {resultado?.estado === 429 ? (
-        <span className="mt-1 block">
-          <EnlacesForge prefijo="Contacto:" />
-        </span>
+    <div role="status" className="text-sm text-amber-900">
+      {resultado && !resultado.ok ? (
+        <p className="mt-2">
+          {resultado.texto}
+          {resultado.estado === 429 ? (
+            <span className="mt-1 block">
+              <EnlacesForge prefijo="Contacto:" />
+            </span>
+          ) : null}
+        </p>
       ) : null}
-    </p>
+    </div>
   );
 }
 
@@ -131,9 +138,7 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
           </div>
         </form>
       ) : null}
-      <div className="mt-2">
-        <AvisoAccion resultado={resultado} />
-      </div>
+      <AvisoAccion resultado={resultado} />
     </article>
   );
 }
@@ -162,9 +167,7 @@ export function Panel({
           Panel del negocio
         </h2>
         <p className="mt-1 text-sm text-tenue">Lo que ve el negocio. Se actualiza solo cada 4 segundos.</p>
-        <div className="mt-2">
-          <AvisoAccion resultado={avisoCarga} />
-        </div>
+        <AvisoAccion resultado={avisoCarga} />
       </header>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:items-start">
