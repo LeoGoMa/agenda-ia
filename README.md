@@ -106,7 +106,8 @@ npm run dev                  # http://localhost:3000
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Postgres through Supabase, server side only | (in memory, development only) |
 | `CRON_SECRET` | Protects `/api/limpieza`; Vercel Cron sends it | (without it, cleanup answers 401) |
 | `AGENDA_SAL_IP` | Secret salt for hashing IPs in the rate-limit counters | required in production |
-| `AGENDA_TOPE_DIARIO` | New conversations per day, across all visitors | 300 |
+| `AGENDA_TOPE_DIARIO` | New conversations per day, across all visitors | 100 |
+| `AGENDA_TOPE_MENSAJES_DIA` | Messages per day that reach the model, across all visitors | 300 |
 | `AGENDA_LIMITE_SESION_HORA` | Messages per session per hour | 20 |
 | `AGENDA_LIMITE_IP_HORA` | Messages per IP per hour | 40 |
 | `AGENDA_MAX_MENSAJES_CONVERSACION` | Messages per conversation (customer and person together) | 30 |
@@ -117,7 +118,7 @@ Deployment step by step (Supabase, Vercel, keys and spend limit), in Spanish: [`
 ### Tests
 
 ```bash
-npx vitest run       # 136 tests; the Supabase integration suite is skipped without credentials
+npx vitest run       # 150 tests; the Supabase integration suite is skipped without credentials
 npx tsc --noEmit
 npm run lint
 npm run build        # also works with no environment variables
@@ -136,7 +137,7 @@ The integration suite (`tests/integracion/`) runs the same repository tests agai
 
 ### Design decisions
 
-**AI spend has a ceiling.** Every limit is enforced before Claude is called, so a visitor who sends messages nonstop can't run up the bill: messages per session and per IP per hour, messages per conversation, new conversations per day and new sessions per IP per hour, all configurable. Each call is capped at `max_tokens: 4000` and each message at 6 tool rounds. The conversation history sent to Claude is capped at 120,000 characters; it is never trimmed, and past that size the conversation only gets the limit message. The business prompt and the tool list are deterministic and cached; the current date comes through a tool, not the prompt, so the cache isn't invalidated. On top of that, the Anthropic account has a monthly spend limit.
+**AI spend has a ceiling.** Every limit is enforced before Claude is called, so a visitor who sends messages nonstop can't run up the bill: messages per session and per IP per hour, messages per conversation, new conversations per day, messages per day that reach the model and new sessions per IP per hour, all configurable. Each call is capped at `max_tokens: 4000`, each message at 6 tool rounds and each round at 4 tool runs. The conversation history sent to Claude is capped at 120,000 characters; it is never trimmed, and past that size the conversation only gets the limit message. The business prompt and the tool list are deterministic and cached; the current date comes through a tool, not the prompt, so the cache isn't invalidated. On top of that, set a monthly spend limit on the Anthropic account before deploying; see [`docs/despliegue.md`](docs/despliegue.md#5-límite-de-gasto-en-anthropic).
 
 **Booking is atomic.** There is one overlap rule: half-open intervals `[start, end)`, where only confirmed appointments of the same session and business count, and a slot is rejected once `capacidadPorHorario` (appointments per slot) appointments overlap it. The same rule runs in the availability engine, the in-memory repository and Postgres. In Postgres, `crear_cita_si_cabe` and `actualizar_cita_si_cabe` take a transaction-scoped advisory lock per session and business, then count and write in the same transaction. Two simultaneous messages asking for the same slot get one booking; the other receives `HORARIO_NO_DISPONIBLE`. The model never decides whether a slot is free: the tools check hours, policies and capacity no matter what the customer or the model says ("book me at 3 a.m.", "ignore your rules").
 

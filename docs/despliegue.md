@@ -69,7 +69,7 @@ Si una prueba falla, guarda la salida y pide ayuda con ella (sin las llaves). La
 
 ## 5. Límite de gasto en Anthropic
 
-La app ya tiene sus propios límites (mensajes por sesión, por IP, por conversación y conversaciones nuevas por día), pero el último seguro es el límite de gasto de la cuenta.
+La app ya tiene sus propios límites (mensajes por sesión, por IP y por conversación, conversaciones nuevas por día y mensajes que llegan al modelo por día), pero el último seguro es el límite de gasto de la cuenta.
 
 1. En la consola de Anthropic, abre la configuración de límites (**Settings → Limits**; si el menú cambió, busca «spend limit»).
 2. Pon un **límite mensual de gasto**. Si tu cuenta permite crear un workspace solo para la demo, créalo, ponle su propio límite y crea ahí la llave del paso 4: así la demo nunca se come el presupuesto de otros proyectos.
@@ -115,7 +115,8 @@ Copia cada valor directo a su variable en Vercel y no lo guardes en otro lado. S
    | `SUPABASE_SERVICE_ROLE_KEY` | La llave del servidor del paso 2 |
    | `CRON_SECRET` | El primer secreto del paso 6 |
    | `AGENDA_SAL_IP` | El segundo secreto del paso 6 |
-   | `AGENDA_TOPE_DIARIO` | Vacía (300 conversaciones nuevas al día) o tu número |
+   | `AGENDA_TOPE_DIARIO` | Vacía (100 conversaciones nuevas al día) o tu número |
+   | `AGENDA_TOPE_MENSAJES_DIA` | Vacía (300 mensajes al modelo al día, entre todos los visitantes) o tu número |
    | `AGENDA_LIMITE_SESION_HORA` | Vacía (20) |
    | `AGENDA_LIMITE_IP_HORA` | Vacía (40) |
    | `AGENDA_MAX_MENSAJES_CONVERSACION` | Vacía (30) |

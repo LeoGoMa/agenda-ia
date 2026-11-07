@@ -50,21 +50,23 @@ Los perfiles de los tres negocios ficticios están en `src/datos/negocios/*.json
 ## El camino de un mensaje
 
 1. **La página.** `proxy.ts` corre antes de cada página: si la cookie `agenda_sesion` falta o no es un uuid v4, pone una nueva. La API no pasa por ahí: sin cookie válida responde 401 y la siguiente carga de página la repone.
-2. **La ruta.** `POST /api/chat` llega a `conSesion` (`src/web/rutas.ts`), que lee la sesión de la cookie y llama a `asegurarSesion`:
+2. **La ruta.** `POST /api/chat` llega a `conSesion` (`src/web/rutas.ts`), que lee la sesión de la cookie, exige `Content-Type: application/json` (415 si no) y llama a `asegurarSesion`:
    - si la sesión ya existe, sigue;
-   - si es nueva, primero cuenta en el tope de sesiones nuevas por IP (429 si se pasa), después crea la fila de `sesiones` y siembra de 3 a 6 citas confirmadas por negocio en sus próximos 5 días hábiles (`src/servicio/siembra.ts`).
+   - si es nueva, primero cuenta en el tope de sesiones nuevas por IP (429 si se pasa), después crea la fila de `sesiones` y siembra de 3 a 6 citas confirmadas por negocio en sus próximos 5 días hábiles (`src/servicio/siembra.ts`; en serie dentro de cada negocio, y una cita que el repositorio rechaza por horario se omite).
 
-   El cuerpo se valida con Zod y se arma como `{ ...cuerpo, sesionId, ip }`: aunque el cuerpo traiga un `sesionId`, nunca pisa al de la cookie.
+   El cuerpo se valida con Zod (el texto, de a lo más 4000 caracteres) y se arma como `{ ...cuerpo, sesionId, ip }`: aunque el cuerpo traiga un `sesionId`, nunca pisa al de la cookie. La IP sale del primer valor de `x-forwarded-for`, que solo es confiable en Vercel (que lo reescribe); detrás de otro proxy, el visitante podría inventarlo.
 3. **El servicio** (`manejarMensaje`, en `src/servicio/chat.ts`):
    1. valida el texto: de 1 a 1000 caracteres reales y sin caracteres de control; si no, 400 sin crear la conversación;
    2. obtiene o crea la conversación (una por sesión y negocio);
-   3. calcula `versionPrompt`, un hash del prompt y las herramientas. Si cambió desde el último turno (se editó un perfil y se redesplegó), arranca un historial de API nuevo y conserva los mensajes visibles;
+   3. calcula `versionPrompt`, un hash del prompt, las herramientas y el modelo efectivo. Si cambió desde el último turno (se editó un perfil o se cambió el modelo y se redesplegó), arranca un historial de API nuevo y conserva los mensajes visibles;
    4. en modo bot, si el historial pasa de 120 000 caracteres, responde 429 sin gastar contadores;
    5. pasa por el limitador (ver «Límites»); si se pasa de algún límite, 429 con el texto en el trato del negocio (usted o tú);
    6. si la conversación está en modo persona, guarda el mensaje, lo agrega al historial de la API y responde «Le atiende una persona…» sin llamar a Claude.
+
+   En el texto que va al historial de la API (en los dos modos), la marca `[Respuesta de una persona del negocio]` pasa a paréntesis: así el visitante no se hace pasar por la persona del negocio. El mensaje visible queda como lo escribió.
 4. **El bot** (`responder`, en `src/bot/responder.ts`) corre un bucle propio de herramientas:
    - cada vuelta llama a `client.beta.messages.create` con el prompt del sistema del negocio, las 8 herramientas y el historial;
-   - si el modelo pide herramientas, se ejecutan (validadas con Zod) y sus resultados vuelven en un solo mensaje `user`;
+   - si el modelo pide herramientas, se ejecutan hasta 4 por vuelta (validadas con Zod); las demás reciben un `tool_result` de error (`NO_EJECUTADA`), y todos los resultados vuelven en un solo mensaje `user`;
    - termina con `end_turn`, con `refusal` o al llegar a 6 vueltas. Con `max_tokens` o en la vuelta 6, las herramientas pendientes **no se ejecutan** (no se agenda nada a ciegas): reciben un `tool_result` de error y el cliente ve un texto de respaldo.
 5. **Se guarda el turno:** el historial de la API completo (con los bloques de pensamiento y de fallback tal como llegaron), el mensaje visible del bot y, si el bot usó `pasar_a_humano`, el modo persona.
 6. **La interfaz** vuelve a pedir el panel. El sondeo de 4 s se salta el tic si ya hay una petición en curso, y solo se aplica la respuesta más reciente (`crearRefresco`, en `src/ui/api.ts`).
@@ -133,10 +135,12 @@ Todos se revisan **antes** de llamar a Claude. Las variables son opcionales y se
 | Mensajes por sesión y por hora | `AGENDA_LIMITE_SESION_HORA` | 20 |
 | Mensajes por IP y por hora | `AGENDA_LIMITE_IP_HORA` | 40 |
 | Mensajes por conversación (cliente y persona del negocio juntos) | `AGENDA_MAX_MENSAJES_CONVERSACION` | 30 |
-| Conversaciones nuevas al día, entre todos los visitantes | `AGENDA_TOPE_DIARIO` | 300 |
+| Conversaciones nuevas al día, entre todos los visitantes | `AGENDA_TOPE_DIARIO` | 100 |
+| Mensajes al día que llegan al modelo, entre todos los visitantes | `AGENDA_TOPE_MENSAJES_DIA` | 300 |
 | Sesiones nuevas por IP y por hora (cada una siembra citas en la base) | `AGENDA_LIMITE_SESIONES_IP_HORA` | 10 |
 | Tokens de salida por llamada (`max_tokens`) | constante | 4000 |
 | Vueltas de herramientas por mensaje | constante | 6 |
+| Herramientas ejecutadas por vuelta | constante | 4 |
 | Caracteres por mensaje | constante | 1000 |
 | Caracteres del historial que se manda a Claude | constante | 120 000 |
 
@@ -144,11 +148,12 @@ Cómo funciona el limitador (`src/servicio/limites.ts`):
 
 - **Ventanas fijas alineadas al reloj:** horas y días UTC.
 - **En producción,** la tabla `contadores` con la RPC `incrementar_contador`. Es un solo `insert … on conflict do update … returning`, así que dos peticiones al mismo tiempo nunca leen el mismo conteo.
-- **Las revisiones van en orden y cada una solo corre si pasó la anterior:** tamaño del historial y mensajes de la conversación (que no gastan contadores), después sesión, IP y tope diario. Así, un visitante rechazado por sesión no se acaba el tope diario de todos.
-- **La IP nunca se guarda en claro:** la clave es el SHA-256 de `AGENDA_SAL_IP` más la IP. En producción la sal es obligatoria. La IP es dato personal según la LFPDPPP, y con una sal secreta el hash no se revierte probando todas las IPv4.
+- **Las revisiones van en orden y cada una solo corre si pasó la anterior:** tamaño del historial y mensajes de la conversación (que no gastan contadores), después sesión, IP, conversaciones nuevas al día y, al final y solo si el mensaje va a llegar al bot, mensajes al modelo al día. Así, un visitante rechazado por sesión no se acaba los topes diarios de todos, y los mensajes en modo persona o desde el panel no cuentan como mensajes al modelo.
+- **La IP nunca se guarda en claro:** la clave es el SHA-256 de `AGENDA_SAL_IP` más la IP. En producción la sal es obligatoria. La IP es dato personal según la LFPDPPP, y con una sal secreta el hash no se revierte probando todas las IPv4. Una IPv6 cuenta por su prefijo /64, para que quien tiene un bloque entero no estrene dirección en cada petición.
+- **La IP sale del primer valor de `x-forwarded-for`:** es confiable solo en Vercel, que lo reescribe con la IP del cliente.
 - **Lo que ve el cliente:** al llegar a un límite, un 429 con un texto amable y la liga a Forge Studio.
 
-Por encima de todo esto está el límite de gasto mensual de la cuenta de Anthropic ([guía de despliegue](despliegue.md#5-límite-de-gasto-en-anthropic)).
+Por encima de todo esto, configura un límite de gasto mensual en la cuenta de Anthropic antes de desplegar ([guía de despliegue](despliegue.md#5-límite-de-gasto-en-anthropic)).
 
 ## Cómo se usa la API de Claude
 

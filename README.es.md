@@ -104,7 +104,8 @@ npm run dev                  # http://localhost:3000
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Postgres en Supabase, solo del lado del servidor | (en memoria, solo en desarrollo) |
 | `CRON_SECRET` | Protege `/api/limpieza`; lo manda el cron de Vercel | (sin ella, la limpieza responde 401) |
 | `AGENDA_SAL_IP` | Sal secreta para guardar las IP como hash en los contadores | obligatoria en producción |
-| `AGENDA_TOPE_DIARIO` | Conversaciones nuevas al día, entre todos los visitantes | 300 |
+| `AGENDA_TOPE_DIARIO` | Conversaciones nuevas al día, entre todos los visitantes | 100 |
+| `AGENDA_TOPE_MENSAJES_DIA` | Mensajes al día que llegan al modelo, entre todos los visitantes | 300 |
 | `AGENDA_LIMITE_SESION_HORA` | Mensajes por sesión y por hora | 20 |
 | `AGENDA_LIMITE_IP_HORA` | Mensajes por IP y por hora | 40 |
 | `AGENDA_MAX_MENSAJES_CONVERSACION` | Mensajes por conversación (cliente y persona juntos) | 30 |
@@ -115,7 +116,7 @@ El despliegue paso a paso (Supabase, Vercel, llaves y límite de gasto) está en
 ### Pruebas
 
 ```bash
-npx vitest run       # 136 pruebas; la integración con Supabase se salta sin credenciales
+npx vitest run       # 150 pruebas; la integración con Supabase se salta sin credenciales
 npx tsc --noEmit
 npm run lint
 npm run build        # también funciona sin variables de entorno
@@ -134,7 +135,7 @@ La suite de integración (`tests/integracion/`) corre las mismas pruebas del rep
 
 ### Decisiones
 
-**El gasto de IA tiene tope.** Todos los límites se revisan antes de llamar a Claude, así que alguien que manda mensajes sin parar no puede inflar la cuenta: mensajes por sesión y por IP cada hora, mensajes por conversación, conversaciones nuevas al día y sesiones nuevas por IP cada hora, todos configurables. Cada llamada tiene `max_tokens: 4000` y cada mensaje, a lo más 6 vueltas de herramientas. El historial que se manda a Claude tiene un tope de 120 000 caracteres; nunca se recorta, y pasado ese tamaño la conversación solo recibe el aviso de límite. El prompt del negocio y la lista de herramientas son deterministas y van en caché; la fecha actual llega por una herramienta y no en el prompt, para no romper la caché. Además, la cuenta de Anthropic tiene un límite de gasto mensual.
+**El gasto de IA tiene tope.** Todos los límites se revisan antes de llamar a Claude, así que alguien que manda mensajes sin parar no puede inflar la cuenta: mensajes por sesión y por IP cada hora, mensajes por conversación, conversaciones nuevas al día, mensajes que llegan al modelo al día y sesiones nuevas por IP cada hora, todos configurables. Cada llamada tiene `max_tokens: 4000`; cada mensaje, a lo más 6 vueltas de herramientas, y cada vuelta, a lo más 4 herramientas ejecutadas. El historial que se manda a Claude tiene un tope de 120 000 caracteres; nunca se recorta, y pasado ese tamaño la conversación solo recibe el aviso de límite. El prompt del negocio y la lista de herramientas son deterministas y van en caché; la fecha actual llega por una herramienta y no en el prompt, para no romper la caché. Además, configura un límite de gasto mensual en la cuenta de Anthropic antes de desplegar; ver [`docs/despliegue.md`](docs/despliegue.md#5-límite-de-gasto-en-anthropic).
 
 **La reserva es atómica.** Hay una sola regla de choque: intervalos semiabiertos `[inicio, fin)`, donde solo cuentan las citas confirmadas de la misma sesión y negocio, y un horario se rechaza cuando ya se enciman `capacidadPorHorario` citas (las que caben a la misma hora). La misma regla corre en el motor de disponibilidad, en el repositorio en memoria y en Postgres. En Postgres, `crear_cita_si_cabe` y `actualizar_cita_si_cabe` toman un candado de transacción por sesión y negocio, y cuentan y escriben dentro de la misma transacción. Si llegan dos mensajes al mismo tiempo por el mismo horario, se guarda una cita y la otra recibe `HORARIO_NO_DISPONIBLE`. El modelo nunca decide si un horario está libre: las herramientas revisan horario, políticas y capacidad diga lo que diga el cliente o el modelo («agéndame a las 3 a. m.», «ignora tus reglas»).
 
