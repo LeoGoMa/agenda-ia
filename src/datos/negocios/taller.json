@@ -1,0 +1,77 @@
+{
+  "id": "taller",
+  "nombre": "Taller Mecánico Tuerca Fina",
+  "giro": "Taller mecánico",
+  "zonaHoraria": "America/Mexico_City",
+  "tono": "Claro, directo y honesto. Tutea, explica con palabras sencillas y nunca promete un diagnóstico sin revisar el auto.",
+  "horario": [
+    { "dia": 1, "abre": "08:00", "cierra": "18:00", "descansos": [] },
+    { "dia": 2, "abre": "08:00", "cierra": "18:00", "descansos": [] },
+    { "dia": 3, "abre": "08:00", "cierra": "18:00", "descansos": [] },
+    { "dia": 4, "abre": "08:00", "cierra": "18:00", "descansos": [] },
+    { "dia": 5, "abre": "08:00", "cierra": "18:00", "descansos": [] },
+    { "dia": 6, "abre": "08:00", "cierra": "18:00", "descansos": [] }
+  ],
+  "servicios": [
+    {
+      "id": "diagnostico",
+      "nombre": "Diagnóstico con escáner",
+      "duracionMin": 60,
+      "precioMxn": 450,
+      "descripcion": "Lectura de códigos de falla y revisión general. Se descuenta si haces la reparación aquí."
+    },
+    {
+      "id": "cambio-aceite",
+      "nombre": "Cambio de aceite y filtro",
+      "duracionMin": 60,
+      "precioMxn": 950,
+      "descripcion": "Hasta 4 litros de aceite sintético, filtro nuevo y revisión de niveles."
+    },
+    {
+      "id": "alineacion",
+      "nombre": "Alineación y balanceo",
+      "duracionMin": 60,
+      "precioMxn": 650,
+      "descripcion": "Alineación de dirección y balanceo de las cuatro llantas."
+    },
+    {
+      "id": "frenos",
+      "nombre": "Cambio de balatas delanteras",
+      "duracionMin": 120,
+      "precioMxn": 1500,
+      "descripcion": "Balatas nuevas, revisión de discos y nivel de líquido de frenos."
+    },
+    {
+      "id": "afinacion",
+      "nombre": "Afinación mayor",
+      "duracionMin": 180,
+      "precioMxn": 2800,
+      "descripcion": "Bujías, filtros de aire y de gasolina, y limpieza de inyectores y del cuerpo de aceleración."
+    }
+  ],
+  "politicas": {
+    "intervaloMin": 60,
+    "anticipacionMinMin": 120,
+    "anticipacionMaxDias": 30,
+    "cancelacionMinHoras": 4,
+    "capacidadPorHorario": 3
+  },
+  "preguntasFrecuentes": [
+    {
+      "pregunta": "¿Cuánto tarda el servicio?",
+      "respuesta": "Depende del servicio: un cambio de aceite sale en una hora y una afinación mayor, en unas tres. Te avisamos por WhatsApp cuando tu auto esté listo."
+    },
+    {
+      "pregunta": "¿Dan garantía?",
+      "respuesta": "Sí, 3 meses o 5,000 km en mano de obra, lo que se cumpla primero."
+    },
+    {
+      "pregunta": "¿Puedo traer mis propias refacciones?",
+      "respuesta": "Sí, pero en ese caso la garantía solo cubre la mano de obra."
+    },
+    {
+      "pregunta": "¿Tienen teléfono?",
+      "respuesta": "Sí, el 55 0000 0031 (número ficticio de demostración), también por WhatsApp."
+    }
+  ]
+}

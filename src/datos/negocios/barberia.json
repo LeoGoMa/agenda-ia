@@ -1,0 +1,77 @@
+{
+  "id": "barberia",
+  "nombre": "Barbería El Bigote Ilustre",
+  "giro": "Barbería",
+  "zonaHoraria": "America/Mexico_City",
+  "tono": "Relajado y amigable, como el barbero de confianza. Tutea, usa frases cortas y un toque de humor sin pasarse.",
+  "horario": [
+    { "dia": 0, "abre": "10:00", "cierra": "20:00", "descansos": [] },
+    { "dia": 2, "abre": "10:00", "cierra": "20:00", "descansos": [] },
+    { "dia": 3, "abre": "10:00", "cierra": "20:00", "descansos": [] },
+    { "dia": 4, "abre": "10:00", "cierra": "20:00", "descansos": [] },
+    { "dia": 5, "abre": "10:00", "cierra": "20:00", "descansos": [] },
+    { "dia": 6, "abre": "10:00", "cierra": "20:00", "descansos": [] }
+  ],
+  "servicios": [
+    {
+      "id": "corte",
+      "nombre": "Corte de cabello",
+      "duracionMin": 45,
+      "precioMxn": 250,
+      "descripcion": "Corte clásico o moderno con máquina y tijera, lavado y peinado incluidos."
+    },
+    {
+      "id": "barba",
+      "nombre": "Arreglo de barba",
+      "duracionMin": 30,
+      "precioMxn": 180,
+      "descripcion": "Perfilado y rebajado de barba con toalla caliente y aceite."
+    },
+    {
+      "id": "corte-barba",
+      "nombre": "Corte y barba",
+      "duracionMin": 60,
+      "precioMxn": 390,
+      "descripcion": "El combo completo: corte de cabello y arreglo de barba en una sola visita."
+    },
+    {
+      "id": "afeitado",
+      "nombre": "Afeitado clásico con navaja",
+      "duracionMin": 30,
+      "precioMxn": 220,
+      "descripcion": "Afeitado tradicional con toalla caliente, espuma y navaja."
+    },
+    {
+      "id": "corte-infantil",
+      "nombre": "Corte infantil",
+      "duracionMin": 30,
+      "precioMxn": 170,
+      "descripcion": "Corte para niños de hasta 12 años."
+    }
+  ],
+  "politicas": {
+    "intervaloMin": 15,
+    "anticipacionMinMin": 30,
+    "anticipacionMaxDias": 14,
+    "cancelacionMinHoras": 2,
+    "capacidadPorHorario": 2
+  },
+  "preguntasFrecuentes": [
+    {
+      "pregunta": "¿Atienden sin cita?",
+      "respuesta": "Sí, si hay una silla libre. Con cita llegas y te sientas sin esperar."
+    },
+    {
+      "pregunta": "¿Qué formas de pago aceptan?",
+      "respuesta": "Efectivo, tarjeta y transferencia."
+    },
+    {
+      "pregunta": "¿Venden productos para barba?",
+      "respuesta": "Sí: aceites, bálsamos y ceras para peinar. Pregunta en el mostrador."
+    },
+    {
+      "pregunta": "¿Tienen teléfono?",
+      "respuesta": "Sí, el 55 0000 0021 (número ficticio de demostración), también por WhatsApp."
+    }
+  ]
+}

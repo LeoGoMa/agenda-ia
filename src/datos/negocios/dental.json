@@ -1,0 +1,77 @@
+{
+  "id": "dental",
+  "nombre": "Clínica Dental Muela Serena",
+  "giro": "Consultorio dental",
+  "zonaHoraria": "America/Mexico_City",
+  "tono": "Cálido, profesional y tranquilizador. Habla de usted, explica sin tecnicismos y nunca da diagnósticos por chat.",
+  "horario": [
+    { "dia": 1, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },
+    { "dia": 2, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },
+    { "dia": 3, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },
+    { "dia": 4, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },
+    { "dia": 5, "abre": "09:00", "cierra": "19:00", "descansos": [{ "inicio": "14:00", "fin": "15:00" }] },
+    { "dia": 6, "abre": "09:00", "cierra": "14:00", "descansos": [] }
+  ],
+  "servicios": [
+    {
+      "id": "valoracion",
+      "nombre": "Consulta de valoración",
+      "duracionMin": 30,
+      "precioMxn": 350,
+      "descripcion": "Revisión general de dientes y encías, diagnóstico y plan de tratamiento con presupuesto."
+    },
+    {
+      "id": "limpieza",
+      "nombre": "Limpieza dental",
+      "duracionMin": 60,
+      "precioMxn": 850,
+      "descripcion": "Retiro de sarro y placa con ultrasonido, pulido y aplicación de flúor."
+    },
+    {
+      "id": "resina",
+      "nombre": "Resina por pieza",
+      "duracionMin": 60,
+      "precioMxn": 1100,
+      "descripcion": "Curación de una caries con resina del color del diente."
+    },
+    {
+      "id": "extraccion",
+      "nombre": "Extracción simple",
+      "duracionMin": 60,
+      "precioMxn": 1300,
+      "descripcion": "Extracción de una pieza sin cirugía, con anestesia local. No incluye muelas del juicio."
+    },
+    {
+      "id": "blanqueamiento",
+      "nombre": "Blanqueamiento en consultorio",
+      "duracionMin": 90,
+      "precioMxn": 3800,
+      "descripcion": "Blanqueamiento con gel y lámpara en una sola sesión. Requiere una limpieza previa."
+    }
+  ],
+  "politicas": {
+    "intervaloMin": 30,
+    "anticipacionMinMin": 120,
+    "anticipacionMaxDias": 30,
+    "cancelacionMinHoras": 24,
+    "capacidadPorHorario": 1
+  },
+  "preguntasFrecuentes": [
+    {
+      "pregunta": "¿Qué formas de pago aceptan?",
+      "respuesta": "Efectivo, tarjeta de débito o crédito y transferencia. En tratamientos desde $3,000 hay meses sin intereses con tarjetas participantes."
+    },
+    {
+      "pregunta": "¿Atienden a niños?",
+      "respuesta": "Sí, desde los 4 años. Un adulto debe acompañarlos durante toda la consulta."
+    },
+    {
+      "pregunta": "¿Atienden urgencias?",
+      "respuesta": "Si tiene dolor fuerte o una pieza rota, agende una consulta de valoración en el primer horario libre y avísenos en el chat para darle prioridad."
+    },
+    {
+      "pregunta": "¿Tienen teléfono?",
+      "respuesta": "Sí, el 55 0000 0011 (número ficticio de demostración), también por WhatsApp."
+    }
+  ]
+}
