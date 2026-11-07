@@ -42,3 +42,26 @@ export async function pedir(url: string, cuerpo?: unknown): Promise<Resultado> {
     return { ok: false, estado: 0, cuerpo: null, texto: SIN_CONEXION };
   }
 }
+
+/**
+ * Las peticiones del panel. `refrescar` (tras cada acción) siempre pide y devuelve lo que trajo; solo se aplica
+ * la respuesta de la petición más reciente, así una vieja no pisa datos más nuevos. `sondear` (el tic de 4 s)
+ * se salta si ya hay una en curso: con la red más lenta que el intervalo, cada tic dejaría vieja a la anterior
+ * y no se aplicaría ninguna.
+ */
+export function crearRefresco<T>(cargar: () => Promise<T>, aplicar: (r: T) => void) {
+  let ultima = 0;
+  let enCurso = 0;
+  const refrescar = async (): Promise<T> => {
+    const numero = ++ultima;
+    enCurso++;
+    try {
+      const r = await cargar();
+      if (numero === ultima) aplicar(r);
+      return r;
+    } finally {
+      enCurso--;
+    }
+  };
+  return { refrescar, sondear: () => (enCurso === 0 ? refrescar() : undefined) };
+}

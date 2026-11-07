@@ -25,7 +25,7 @@ function AvisoAccion({ resultado }: { resultado: Resultado | null }) {
   );
 }
 
-function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: ConversacionVista; zona: string; alCambiar: () => Promise<void> }) {
+function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: ConversacionVista; zona: string; alCambiar: () => Promise<Resultado> }) {
   const [ocupado, setOcupado] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [texto, setTexto] = useState("");
@@ -131,7 +131,7 @@ export function Panel({
   perfil: PerfilVista;
   datos: DatosPanel | null;
   avisoCarga: Resultado | null;
-  alCambiar: () => Promise<void>;
+  alCambiar: () => Promise<Resultado>;
 }) {
   const servicio = new Map(perfil.servicios.map((s) => [s.id, s.nombre]));
   const zona = perfil.zonaHoraria;

@@ -76,7 +76,7 @@ export function Chat({
   cargando: boolean;
   /** Si la primera carga falló, el chat dice por qué en vez de quedarse en «Cargando…». */
   avisoCarga: Resultado | null;
-  alCambiar: () => Promise<void>;
+  alCambiar: () => Promise<Resultado>;
 }) {
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);

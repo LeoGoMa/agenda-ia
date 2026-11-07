@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { crearRefresco, pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { Chat } from "./Chat";
 import { Panel } from "./Panel";
 
@@ -19,24 +19,26 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
   // La última petición del panel que falló (401, 429 por sesiones nuevas, 500 o sin red); null si salió bien.
   const [avisoCarga, setAvisoCarga] = useState<Resultado | null>(null);
   const [pestana, setPestana] = useState<Pestana>("chat");
-  const ultima = useRef(0);
 
-  const refrescar = useCallback(async () => {
-    // Solo cuenta la respuesta de la petición más reciente: una vieja no pisa datos más nuevos.
-    const numero = ++ultima.current;
-    const r = await pedir(`/api/panel?negocioId=${encodeURIComponent(perfil.id)}`);
-    if (numero !== ultima.current) return;
-    if (r.ok) {
-      setDatos(r.cuerpo as DatosPanel);
-      setAvisoCarga(null);
-    } else {
-      setAvisoCarga(r);
-    }
-  }, [perfil.id]);
+  const { refrescar, sondear } = useMemo(
+    () =>
+      crearRefresco(
+        () => pedir(`/api/panel?negocioId=${encodeURIComponent(perfil.id)}`),
+        (r) => {
+          if (r.ok) {
+            setDatos(r.cuerpo as DatosPanel);
+            setAvisoCarga(null);
+          } else {
+            setAvisoCarga(r);
+          }
+        },
+      ),
+    [perfil.id],
+  );
 
   useEffect(() => {
     const tic = () => {
-      if (!document.hidden) void refrescar();
+      if (!document.hidden) void sondear();
     };
     tic();
     const id = setInterval(tic, INTERVALO_MS);
@@ -45,7 +47,7 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
       clearInterval(id);
       document.removeEventListener("visibilitychange", tic);
     };
-  }, [refrescar]);
+  }, [sondear]);
 
   // Patrón de pestañas: las flechas cambian de pestaña y mueven el foco.
   const alTeclear = (e: KeyboardEvent) => {

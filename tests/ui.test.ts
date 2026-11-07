@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MARCA_DEMO } from "@/src/bot/responderDev";
+import { crearRefresco } from "@/src/ui/api";
 import {
   agruparPorDia,
   contarCitas,
@@ -94,6 +95,60 @@ describe("textoDeAviso", () => {
     for (const cuerpo of [null, undefined, "texto", {}, { respuesta: 7 }, { error: "" }]) {
       expect(textoDeAviso(cuerpo), JSON.stringify(cuerpo)).toBe(generico);
     }
+  });
+});
+
+describe("crearRefresco (el sondeo del panel)", () => {
+  /** Peticiones que se resuelven a mano, en el orden que pida la prueba. */
+  function red() {
+    const pendientes: ((valor: string) => void)[] = [];
+    const cargar = vi.fn(() => new Promise<string>((resolver) => pendientes.push(resolver)));
+    return { cargar, responder: (i: number, valor: string) => pendientes[i](valor) };
+  }
+
+  it("el tic se salta si hay una petición en curso: con la red más lenta que el intervalo, cada respuesta se aplica", async () => {
+    const { cargar, responder } = red();
+    const aplicar = vi.fn();
+    const { sondear } = crearRefresco(cargar, aplicar);
+
+    const primera = sondear();
+    expect(sondear()).toBeUndefined(); // tic de los 4 s con la primera aún en camino
+    expect(sondear()).toBeUndefined();
+    expect(cargar).toHaveBeenCalledTimes(1);
+    responder(0, "datos 1");
+    await primera;
+    expect(aplicar).toHaveBeenCalledWith("datos 1");
+
+    const segunda = sondear();
+    expect(cargar).toHaveBeenCalledTimes(2);
+    responder(1, "datos 2");
+    await segunda;
+    expect(aplicar.mock.calls).toEqual([["datos 1"], ["datos 2"]]);
+  });
+
+  it("tras una acción siempre pide, y la respuesta vieja del sondeo no pisa la más nueva", async () => {
+    const { cargar, responder } = red();
+    const aplicar = vi.fn();
+    const { sondear, refrescar } = crearRefresco(cargar, aplicar);
+
+    const delSondeo = sondear(); // salió antes de la acción: puede traer datos viejos
+    const trasAccion = refrescar();
+    expect(cargar).toHaveBeenCalledTimes(2);
+    responder(1, "nuevos");
+    // Quien llamó recibe lo que pidió, aunque otra petición más nueva lo haya dejado sin aplicar.
+    expect(await trasAccion).toBe("nuevos");
+    responder(0, "viejos");
+    expect(await delSondeo).toBe("viejos");
+    expect(aplicar.mock.calls).toEqual([["nuevos"]]);
+  });
+
+  it("una petición que falla no traba el sondeo", async () => {
+    const cargar = vi.fn().mockRejectedValueOnce(new Error("sin red")).mockResolvedValueOnce("datos");
+    const aplicar = vi.fn();
+    const { sondear } = crearRefresco(cargar, aplicar);
+    await expect(sondear()).rejects.toThrow("sin red");
+    await sondear();
+    expect(aplicar).toHaveBeenCalledWith("datos");
   });
 });
 
