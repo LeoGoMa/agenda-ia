@@ -64,6 +64,9 @@ function peticion(ruta: string, { sesion, cuerpo, ip = IP, encabezados = {} }: O
 
 const leer = async (r: Response) => ({ estado: r.status, cuerpo: await r.json() });
 
+/** Las citas que agendó el responder de demostración; las demás son las ficticias sembradas con la sesión. */
+const deDemo = <T extends { cliente: { nombre: string } }>(citas: T[]) => citas.filter((c) => c.cliente.nombre === "Cliente Demo");
+
 /** Un visitante con su cookie de sesión. */
 function visitante(sesion: string = crypto.randomUUID(), ip = IP) {
   return {
@@ -270,7 +273,8 @@ describe("rutas del chat y el panel", () => {
     let tablero = await ana.verPanel();
     expect(tablero.estado).toBe(200);
     // Solo lo que muestra el panel: ni el id de sesión ni el historial de la API salen del servidor.
-    expect(tablero.cuerpo.citas).toEqual([
+    expect(Object.keys(tablero.cuerpo.citas[0]).sort()).toEqual(["cliente", "estado", "fin", "id", "inicio", "servicioId"]);
+    expect(deDemo(tablero.cuerpo.citas)).toEqual([
       {
         id: expect.stringMatching(UUID_V4),
         servicioId: "valoracion",
@@ -304,19 +308,44 @@ describe("rutas del chat y el panel", () => {
     expect((await ana.verPanel()).cuerpo.conversaciones[0].modo).toBe("bot");
     expect((await ana.escribir("Hola de nuevo")).cuerpo.modo).toBe("bot");
 
-    // Otro negocio de la misma sesión tiene su propio panel.
-    expect((await ana.verPanel("barberia")).cuerpo).toEqual({ citas: [], conversaciones: [] });
+    // Otro negocio de la misma sesión tiene su propio panel: solo sus citas sembradas y ninguna conversación.
+    const barberia = (await ana.verPanel("barberia")).cuerpo;
+    expect(barberia.conversaciones).toEqual([]);
+    expect(barberia.citas.length).toBeGreaterThanOrEqual(3);
+    expect(deDemo(barberia.citas)).toEqual([]);
+  });
+
+  it("una sesión nueva ve citas ficticias sembradas en los tres negocios; una existente no siembra otra vez", async () => {
+    const ana = visitante();
+    const negocios = ["dental", "barberia", "taller"];
+    const primera = [];
+    for (const negocioId of negocios) primera.push((await ana.verPanel(negocioId)).cuerpo.citas);
+    for (const [i, citas] of primera.entries()) {
+      expect(citas.length, negocios[i]).toBeGreaterThanOrEqual(3);
+      expect(citas.length, negocios[i]).toBeLessThanOrEqual(6);
+      expect(citas.every((c: { estado: string }) => c.estado === "confirmada")).toBe(true);
+      expect(citas.every((c: { inicio: string }) => c.inicio > ahora.toISOString())).toBe(true);
+    }
+    // Otras peticiones de la misma sesión (también el chat) no vuelven a sembrar.
+    await ana.escribir("Hola");
+    for (const [i, negocioId] of negocios.entries()) {
+      expect((await ana.verPanel(negocioId)).cuerpo.citas, negocioId).toEqual(primera[i]);
+    }
+    // Cada sesión tiene las suyas.
+    expect((await visitante().verPanel()).cuerpo.citas).not.toEqual(primera[0]);
   });
 
   it("el panel ignora un sesionId en la consulta", async () => {
     const ana = visitante();
     const beto = visitante();
     await ana.escribir("Agenda el primero");
-    expect((await ana.verPanel()).cuerpo.citas).toHaveLength(1);
+    expect(deDemo((await ana.verPanel()).cuerpo.citas)).toHaveLength(1);
 
-    // Beto pide el panel con el id de Ana en la consulta: ve solo lo suyo (nada).
+    // Beto pide el panel con el id de Ana en la consulta: ve solo lo suyo (sus citas sembradas, sin conversaciones).
+    const deBeto = await beto.verPanel();
+    expect(deDemo(deBeto.cuerpo.citas)).toEqual([]);
     const conIdAjeno = await panel(peticion(`/api/panel?negocioId=dental&sesionId=${ana.sesion}`, { sesion: beto.sesion }));
-    expect(await leer(conIdAjeno)).toEqual({ estado: 200, cuerpo: { citas: [], conversaciones: [] } });
+    expect(await leer(conIdAjeno)).toEqual({ estado: 200, cuerpo: { citas: deBeto.cuerpo.citas, conversaciones: [] } });
     // Sin cookie, el id en la consulta o en un encabezado no sirve de nada.
     const sinCookie = await panel(
       peticion(`/api/panel?negocioId=dental&sesionId=${ana.sesion}`, { encabezados: { "x-sesion-id": ana.sesion } }),
@@ -421,7 +450,7 @@ describe("rutas del chat y el panel", () => {
     expect((await ana.escribir("¿Qué horarios tienen?")).estado).toBe(200);
     expect(await ana.escribir("Agenda el primero")).toEqual({ estado: 429, cuerpo: { respuesta: TEXTOS.limite, modo: "bot" } });
     const tablero = await ana.verPanel();
-    expect(tablero.cuerpo.citas).toEqual([]); // el bot no se llamó
+    expect(deDemo(tablero.cuerpo.citas)).toEqual([]); // el bot no se llamó
     expect(await ana.responder(tablero.cuerpo.conversaciones[0].id, "Hola")).toEqual({ estado: 429, cuerpo: { respuesta: TEXTOS.limite } });
   });
 

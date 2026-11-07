@@ -7,16 +7,24 @@ import { crearRepoSupabase } from "../repo/supabase";
 import { almacenSupabase } from "./almacenSupabase";
 import type { DepsChat, Responder } from "./chat";
 import { almacenMemoria, crearLimitador, limitesDesdeEntorno, type AlmacenContadores } from "./limites";
+import { sembrarCitas } from "./siembra";
 
 export interface Deps extends DepsChat {
-  /** Crea la fila de `sesiones` si falta (en memoria no hace nada): citas y conversaciones la referencian. */
+  /**
+   * Crea la fila de `sesiones` si falta (citas y conversaciones la referencian) y, solo la primera vez,
+   * siembra sus citas ficticias para que la agenda se vea ocupada.
+   */
   asegurarSesion(sesionId: string): Promise<void>;
   /** Borra las sesiones de más de 7 días con todo lo suyo y devuelve cuántas borró. */
   limpiar(): Promise<number>;
 }
 
 type Entorno = Record<string, string | undefined>;
-type Datos = Pick<Deps, "repo" | "asegurarSesion" | "limpiar"> & { almacen: AlmacenContadores };
+type Datos = Pick<Deps, "repo" | "limpiar"> & {
+  almacen: AlmacenContadores;
+  /** Crea la fila de `sesiones` si falta; true solo si la creó esta llamada. */
+  crearSesion(id: string): Promise<boolean>;
+};
 
 /** Supabase con las dos variables; sin ellas, memoria (solo fuera de producción). */
 function armarDatos(env: Entorno, produccion: boolean): Datos {
@@ -26,9 +34,11 @@ function armarDatos(env: Entorno, produccion: boolean): Datos {
     return {
       repo: crearRepoSupabase(cliente),
       almacen: almacenSupabase(cliente),
-      async asegurarSesion(id) {
-        const { error } = await cliente.from("sesiones").upsert({ id }, { onConflict: "id", ignoreDuplicates: true });
+      async crearSesion(id) {
+        // Con ignoreDuplicates es un insert ... on conflict do nothing: solo devuelve la fila si la insertó.
+        const { data, error } = await cliente.from("sesiones").upsert({ id }, { onConflict: "id", ignoreDuplicates: true }).select("id");
         if (error) throw fallo(error);
+        return data.length > 0;
       },
       async limpiar() {
         const { data, error } = await cliente.rpc("limpiar_sesiones_viejas");
@@ -40,7 +50,17 @@ function armarDatos(env: Entorno, produccion: boolean): Datos {
   if (produccion) {
     throw new Error("Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY: en producción no se usa el repositorio en memoria (ver .env.example)");
   }
-  return { repo: crearRepoMemoria(), almacen: almacenMemoria(), asegurarSesion: async () => {}, limpiar: async () => 0 };
+  const sesiones = new Set<string>();
+  return {
+    repo: crearRepoMemoria(),
+    almacen: almacenMemoria(),
+    async crearSesion(id) {
+      if (sesiones.has(id)) return false;
+      sesiones.add(id);
+      return true;
+    },
+    limpiar: async () => 0,
+  };
 }
 
 /** Claude con `ANTHROPIC_API_KEY`; sin ella, el responder guionado sin red (solo fuera de producción). */
@@ -63,13 +83,22 @@ function armarResponder(env: Entorno, produccion: boolean): Responder {
 export function armarDeps(env: Entorno = process.env): Deps {
   const produccion = env.NODE_ENV === "production";
   const limites = limitesDesdeEntorno(env);
-  const { almacen, ...datos } = armarDatos(env, produccion);
+  const { almacen, crearSesion, ...datos } = armarDatos(env, produccion);
   const responder = armarResponder(env, produccion);
   if (env.NODE_ENV === "development") {
     const repo = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "Supabase" : "memoria";
     console.info(`Agenda IA: datos en ${repo}, responder ${responder === responderDev ? "de demostración sin IA" : "de Claude"}.`);
   }
-  return { ...datos, limitador: crearLimitador(almacen, limites), responder, ahora: () => new Date() };
+  const ahora = () => new Date();
+  return {
+    ...datos,
+    async asegurarSesion(sesionId) {
+      if (await crearSesion(sesionId)) await sembrarCitas(datos.repo, sesionId, ahora());
+    },
+    limitador: crearLimitador(almacen, limites),
+    responder,
+    ahora,
+  };
 }
 
 // En desarrollo, cada ruta y cada recarga en caliente pueden evaluar este módulo por separado; en globalThis

@@ -5,6 +5,7 @@ import { ErrorDominio } from "@/src/dominio/tipos";
 import { crearRepoSupabase } from "@/src/repo/supabase";
 import type { Repositorio } from "@/src/repo/tipos";
 import { almacenSupabase } from "@/src/servicio/almacenSupabase";
+import { armarDeps } from "@/src/servicio/deps";
 import { pruebasDeRepositorio } from "../compartidas/repositorio";
 
 /**
@@ -93,6 +94,18 @@ if (!url || !llave) {
       await repo.conversaciones.guardarHistorialApi(id, historial, "v1");
       const guardada = await repo.conversaciones.obtener(sesionId, id);
       expect(JSON.stringify(guardada.historialApi)).toBe(JSON.stringify(historial));
+    });
+
+    it("asegurarSesion crea la sesión y siembra sus citas ficticias solo la primera vez", async () => {
+      const deps = armarDeps({ NODE_ENV: "test", SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: llave });
+      const sesionId = crypto.randomUUID();
+      sesionesCreadas.add(sesionId);
+      const listar = () => deps.repo.citas.listar(sesionId, "dental", "2000-01-01T00:00:00.000Z", "9999-12-31T00:00:00.000Z");
+      await deps.asegurarSesion(sesionId);
+      const primera = await listar();
+      expect(primera.length).toBeGreaterThanOrEqual(3);
+      await deps.asegurarSesion(sesionId);
+      expect(await listar()).toEqual(primera);
     });
 
     it("incrementar_contador suma en la ventana actual de forma atómica", async () => {
