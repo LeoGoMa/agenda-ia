@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { obtenerPerfil } from "@/src/dominio/perfiles";
 import { ErrorDominio } from "@/src/dominio/tipos";
 import { crearRepoSupabase } from "@/src/repo/supabase";
@@ -21,6 +21,8 @@ if (!url || !llave) {
     it("pruebas de repositorio, contadores y limpieza contra Postgres", () => {});
   });
 } else {
+  // Cada prueba hace varias idas y vueltas por red a Supabase; los 5 s por defecto no alcanzan.
+  vi.setConfig({ testTimeout: 30_000 });
   const cliente = createClient(url, llave, { auth: { persistSession: false } });
   const sesionesCreadas = new Set<string>();
   const crearSesion = async (id: string, creada?: string) => {
@@ -49,7 +51,8 @@ if (!url || !llave) {
 
   afterAll(async () => {
     // Borrar la sesión borra en cascada sus citas, conversaciones y mensajes.
-    await cliente.from("sesiones").delete().in("id", [...sesionesCreadas]);
+    const { error } = await cliente.from("sesiones").delete().in("id", [...sesionesCreadas]);
+    if (error) throw new Error(`No se pudieron borrar las sesiones de prueba: ${error.message}`);
   });
 
   pruebasDeRepositorio("Supabase", () => conSesion(crearRepoSupabase(cliente)));

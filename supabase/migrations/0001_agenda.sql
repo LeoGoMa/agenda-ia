@@ -69,6 +69,10 @@ alter table public.contadores enable row level security;
 revoke all on table public.sesiones, public.citas, public.conversaciones, public.mensajes, public.contadores
   from anon, authenticated;
 revoke all on sequence public.mensajes_id_seq from anon, authenticated;
+-- La service role (el servidor) los tiene por los privilegios por defecto de Supabase; se dan explícitos
+-- para que la migración no dependa de ellos.
+grant select, insert, update, delete on table public.sesiones, public.citas, public.conversaciones, public.mensajes, public.contadores to service_role;
+grant usage, select on sequence public.mensajes_id_seq to service_role;
 
 -- Conversaciones: contador de mensajes del visitante y fecha de actualización ---------------------
 
