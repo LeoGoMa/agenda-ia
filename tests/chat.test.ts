@@ -12,7 +12,8 @@ const POR_DEFECTO: ConfigLimites = {
   sesionPorHora: 20,
   ipPorHora: 40,
   mensajesPorConversacion: 30,
-  conversacionesPorDia: 300,
+  conversacionesPorDia: 100,
+  mensajesBotPorDia: 300,
   sesionesNuevasIpPorHora: 10,
   salIp: SAL_DESARROLLO,
 };
@@ -76,6 +77,7 @@ describe("límites", () => {
       AGENDA_LIMITE_IP_HORA: "",
       AGENDA_MAX_MENSAJES_CONVERSACION: "",
       AGENDA_TOPE_DIARIO: "",
+      AGENDA_TOPE_MENSAJES_DIA: "",
       AGENDA_LIMITE_SESIONES_IP_HORA: "",
     };
     expect(limitesDesdeEntorno(vacias)).toEqual(POR_DEFECTO);
@@ -85,6 +87,7 @@ describe("límites", () => {
         AGENDA_LIMITE_IP_HORA: "8",
         AGENDA_MAX_MENSAJES_CONVERSACION: "12",
         AGENDA_TOPE_DIARIO: "50",
+        AGENDA_TOPE_MENSAJES_DIA: "120",
         AGENDA_LIMITE_SESIONES_IP_HORA: "3",
       }),
     ).toEqual({
@@ -92,12 +95,14 @@ describe("límites", () => {
       ipPorHora: 8,
       mensajesPorConversacion: 12,
       conversacionesPorDia: 50,
+      mensajesBotPorDia: 120,
       sesionesNuevasIpPorHora: 3,
       salIp: SAL_DESARROLLO,
     });
     for (const malo of ["0", "-3", "2.5", "veinte"]) {
       expect(() => limitesDesdeEntorno({ AGENDA_LIMITE_IP_HORA: malo }), malo).toThrow("AGENDA_LIMITE_IP_HORA");
       expect(() => limitesDesdeEntorno({ AGENDA_LIMITE_SESIONES_IP_HORA: malo }), malo).toThrow("AGENDA_LIMITE_SESIONES_IP_HORA");
+      expect(() => limitesDesdeEntorno({ AGENDA_TOPE_MENSAJES_DIA: malo }), malo).toThrow("AGENDA_TOPE_MENSAJES_DIA");
     }
   });
 
@@ -127,8 +132,12 @@ describe("límites", () => {
       },
     };
     const limitador = crearLimitador(almacen, { ...POR_DEFECTO, salIp: "sal-de-prueba" });
-    await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0 });
-    expect(claves).toEqual(["sesion:s", `ip:${esperado}`, "conversaciones-nuevas"]);
+    await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0, llamaAlBot: true });
+    expect(claves).toEqual(["sesion:s", `ip:${esperado}`, "conversaciones-nuevas", "mensajes-dia"]);
+    claves.length = 0;
+    // Sin llamada al bot (modo humano o mensaje del panel) no se toca el contador de mensajes al modelo.
+    await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: false, mensajesConversacion: 0, llamaAlBot: false });
+    expect(claves).toEqual(["sesion:s", `ip:${esperado}`]);
     await limitador.sesionNueva(IP);
     expect(claves.at(-1)).toBe(`sesion-nueva:${esperado}`);
     expect(claves.join(" ")).not.toContain(IP);
@@ -137,7 +146,7 @@ describe("límites", () => {
   it("el limitador da el motivo de cada límite", async () => {
     const limitador = crearLimitador(almacenMemoria(), POR_DEFECTO);
     const verificar = (cambios: Partial<Parameters<typeof limitador.verificar>[0]>) =>
-      limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: false, mensajesConversacion: 0, ...cambios });
+      limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: false, mensajesConversacion: 0, llamaAlBot: false, ...cambios });
 
     expect(await verificar({ mensajesConversacion: 29 })).toEqual({ permitido: true });
     expect(await verificar({ mensajesConversacion: 30 })).toEqual({ permitido: false, motivo: "conversacion" });
@@ -148,14 +157,20 @@ describe("límites", () => {
     for (let i = 0; i < 40; i++) expect(await verificar({ sesionId: `ip-${i}`, ip: "compartida" })).toEqual({ permitido: true });
     expect(await verificar({ sesionId: "ip-40", ip: "compartida" })).toEqual({ permitido: false, motivo: "ip" });
 
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 100; i++) {
       expect(await verificar({ sesionId: `d-${i}`, ip: `ip-d-${i}`, esNuevaConversacion: true })).toEqual({ permitido: true });
     }
-    expect(await verificar({ sesionId: "d-300", ip: "ip-d-300", esNuevaConversacion: true })).toEqual({
+    expect(await verificar({ sesionId: "d-100", ip: "ip-d-100", esNuevaConversacion: true })).toEqual({
       permitido: false,
       motivo: "diario",
     });
-    expect(await verificar({ sesionId: "d-300", ip: "ip-d-300" })).toEqual({ permitido: true }); // una que ya empezó sigue
+    expect(await verificar({ sesionId: "d-100", ip: "ip-d-100" })).toEqual({ permitido: true }); // una que ya empezó sigue
+
+    for (let i = 0; i < 300; i++) {
+      expect(await verificar({ sesionId: `m-${i}`, ip: `ip-m-${i}`, llamaAlBot: true })).toEqual({ permitido: true });
+    }
+    expect(await verificar({ sesionId: "m-300", ip: "ip-m-300", llamaAlBot: true })).toEqual({ permitido: false, motivo: "mensajes-dia" });
+    expect(await verificar({ sesionId: "m-300", ip: "ip-m-300" })).toEqual({ permitido: true }); // sin llamar al bot, sigue
   });
 
   it("las sesiones nuevas por IP tienen su propio tope por hora", async () => {
@@ -165,19 +180,35 @@ describe("límites", () => {
     expect(await limitador.sesionNueva(IP)).toBe(false);
     expect(await limitador.sesionNueva("198.51.100.4")).toBe(true); // otra IP
     // No toca los contadores de mensajes: la IP sigue pudiendo escribir.
-    expect(await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0 })).toEqual({ permitido: true });
+    expect(
+      await limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: true, mensajesConversacion: 0, llamaAlBot: true }),
+    ).toEqual({ permitido: true });
     vi.setSystemTime(ahora.getTime() + HORA); // la hora siguiente vuelve a empezar
     expect(await limitador.sesionNueva(IP)).toBe(true);
   });
 
   it("un mensaje rechazado por sesión o IP no gasta el tope diario", async () => {
     const limitador = crearLimitador(almacenMemoria(), { ...POR_DEFECTO, sesionPorHora: 1, ipPorHora: 2, conversacionesPorDia: 2 });
-    const nueva = (sesionId: string, ip: string) => limitador.verificar({ ip, sesionId, esNuevaConversacion: true, mensajesConversacion: 0 });
+    const nueva = (sesionId: string, ip: string) =>
+      limitador.verificar({ ip, sesionId, esNuevaConversacion: true, mensajesConversacion: 0, llamaAlBot: false });
     expect(await nueva("a", "ip-1")).toEqual({ permitido: true }); // diario: 1
     expect(await nueva("a", "ip-2")).toEqual({ permitido: false, motivo: "sesion" });
     expect(await nueva("b", "ip-1")).toEqual({ permitido: true }); // diario: 2
     expect(await nueva("c", "ip-1")).toEqual({ permitido: false, motivo: "ip" });
     expect(await nueva("d", "ip-3")).toEqual({ permitido: false, motivo: "diario" }); // los rechazos de arriba no contaron
+  });
+
+  it("el tope de mensajes al modelo se revisa al final: un rechazo anterior no lo gasta", async () => {
+    const limitador = crearLimitador(almacenMemoria(), { ...POR_DEFECTO, sesionPorHora: 1, conversacionesPorDia: 1, mensajesBotPorDia: 2 });
+    const alBot = (sesionId: string, esNuevaConversacion = false) =>
+      limitador.verificar({ ip: IP, sesionId, esNuevaConversacion, mensajesConversacion: 0, llamaAlBot: true });
+    expect(await alBot("a", true)).toEqual({ permitido: true }); // mensajes al modelo: 1
+    expect(await alBot("a")).toEqual({ permitido: false, motivo: "sesion" });
+    expect(await alBot("b", true)).toEqual({ permitido: false, motivo: "diario" });
+    expect(await alBot("c")).toEqual({ permitido: true }); // mensajes al modelo: 2; los rechazos de arriba no contaron
+    expect(await alBot("d")).toEqual({ permitido: false, motivo: "mensajes-dia" });
+    vi.setSystemTime(ahora.getTime() + 24 * HORA); // al día siguiente vuelve a abrir
+    expect(await alBot("e")).toEqual({ permitido: true });
   });
 });
 
@@ -259,6 +290,29 @@ describe("manejarMensaje", () => {
 
     vi.setSystemTime(ahora.getTime() + 24 * HORA); // al día siguiente vuelve a abrir
     expect((await diario.enviar("Hola", { sesionId: s3 })).estado).toBe(200);
+  });
+
+  it("tope diario de mensajes al modelo: al pasarlo no se llama al bot; el modo humano y el panel no lo gastan", async () => {
+    const { deps, enviar, responder, conversacion, panel, sesionId } = preparar({ limites: { mensajesBotPorDia: 2 } });
+    expect((await enviar("Hola")).estado).toBe(200);
+    const { id } = await conversacion();
+    await deps.repo.conversaciones.cambiarModo(sesionId, id, "humano");
+    expect((await enviar("¿Hay alguien?")).estado).toBe(200); // modo humano: no llega al modelo
+    expect(await panel("Hola, le atiende recepción.")).toEqual({ estado: 200 });
+    await devolverAlBot(deps, { sesionId, conversacionId: id });
+    expect((await enviar("¿Me agenda una limpieza?")).estado).toBe(200);
+    expect(responder).toHaveBeenCalledTimes(2);
+
+    // Cuenta entre todos los visitantes: otra sesión, desde otra IP, también se queda sin bot.
+    const otra = crypto.randomUUID();
+    expect(await enviar("Hola", { sesionId: otra, ip: "198.51.100.4" })).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
+    expect(await enviar("¿Siguen ahí?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
+    expect(responder).toHaveBeenCalledTimes(2);
+    expect((await conversacion(otra)).mensajes).toEqual([]);
+
+    vi.setSystemTime(ahora.getTime() + 24 * HORA); // al día siguiente vuelve a abrir
+    expect((await enviar("Hola", { sesionId: otra, ip: "198.51.100.4" })).estado).toBe(200);
+    expect(responder).toHaveBeenCalledTimes(3);
   });
 
   it("una conversación admite 30 mensajes del visitante", async () => {

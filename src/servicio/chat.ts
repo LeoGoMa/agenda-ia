@@ -109,6 +109,7 @@ export async function manejarMensaje(
     sesionId,
     esNuevaConversacion: conv.mensajesVisitante === 0,
     mensajesConversacion: mensajesConversacion(conv),
+    llamaAlBot: conv.modo === "bot",
   });
   if (!limite.permitido) return { estado: 429, respuesta: textos.limite, modo: conv.modo };
 
@@ -153,6 +154,7 @@ export async function mensajeHumano(
     sesionId,
     esNuevaConversacion: false,
     mensajesConversacion: mensajesConversacion(conv),
+    llamaAlBot: false,
   });
   if (!limite.permitido) return { estado: 429, respuesta: textos.limite };
 

@@ -18,6 +18,8 @@ export interface ConfigLimites {
   mensajesPorConversacion: number;
   /** Conversaciones nuevas al día, entre todos los visitantes. */
   conversacionesPorDia: number;
+  /** Mensajes al día que llegan al modelo, entre todos los visitantes: el tope del gasto diario de la API. */
+  mensajesBotPorDia: number;
   /** Sesiones nuevas por IP y por hora: cada una crea una fila y siembra citas en la base. */
   sesionesNuevasIpPorHora: number;
   /** Sal del hash de la IP: los contadores nunca guardan la IP en claro. */
@@ -29,7 +31,9 @@ export function hashIp(ip: string, sal: string): string {
   return createHash("sha256").update(sal + ip).digest("hex");
 }
 
-export type Verificacion = { permitido: true } | { permitido: false; motivo: "sesion" | "ip" | "diario" | "conversacion" };
+export type Verificacion =
+  | { permitido: true }
+  | { permitido: false; motivo: "sesion" | "ip" | "diario" | "mensajes-dia" | "conversacion" };
 
 /**
  * `||` y no `??`: una variable vacía, como las de `.env.example`, toma el valor por defecto.
@@ -48,7 +52,8 @@ export function limitesDesdeEntorno(env: Record<string, string | undefined> = pr
     sesionPorHora: leer("AGENDA_LIMITE_SESION_HORA", 20),
     ipPorHora: leer("AGENDA_LIMITE_IP_HORA", 40),
     mensajesPorConversacion: leer("AGENDA_MAX_MENSAJES_CONVERSACION", 30),
-    conversacionesPorDia: leer("AGENDA_TOPE_DIARIO", 300),
+    conversacionesPorDia: leer("AGENDA_TOPE_DIARIO", 100),
+    mensajesBotPorDia: leer("AGENDA_TOPE_MENSAJES_DIA", 300),
     sesionesNuevasIpPorHora: leer("AGENDA_LIMITE_SESIONES_IP_HORA", 10),
     salIp: env.AGENDA_SAL_IP || SAL_SOLO_DESARROLLO,
   };
@@ -59,19 +64,22 @@ export function crearLimitador(almacen: AlmacenContadores, config: ConfigLimites
     /**
      * Cada mensaje del visitante o de la persona del negocio pasa por aquí antes de guardarse o de llamar a Claude.
      * El tope por conversación no gasta contadores, y cada contador solo se toca si pasaron los anteriores:
-     * así un visitante rechazado por sesión o IP no se acaba el tope diario de todos.
+     * así un visitante rechazado por sesión o IP no se acaba los topes diarios de todos.
      */
     async verificar({
       ip,
       sesionId,
       esNuevaConversacion,
       mensajesConversacion,
+      llamaAlBot,
     }: {
       ip: string;
       sesionId: string;
       esNuevaConversacion: boolean;
       /** Mensajes del visitante y de la persona del negocio que ya tiene la conversación. */
       mensajesConversacion: number;
+      /** Si al pasar se llamará al modelo: solo entonces cuenta para el tope diario de mensajes al modelo. */
+      llamaAlBot: boolean;
     }): Promise<Verificacion> {
       if (mensajesConversacion >= config.mensajesPorConversacion) return { permitido: false, motivo: "conversacion" };
       if ((await almacen.incrementar(`sesion:${sesionId}`, HORA_SEG)) > config.sesionPorHora) {
@@ -82,6 +90,9 @@ export function crearLimitador(almacen: AlmacenContadores, config: ConfigLimites
       }
       if (esNuevaConversacion && (await almacen.incrementar("conversaciones-nuevas", DIA_SEG)) > config.conversacionesPorDia) {
         return { permitido: false, motivo: "diario" };
+      }
+      if (llamaAlBot && (await almacen.incrementar("mensajes-dia", DIA_SEG)) > config.mensajesBotPorDia) {
+        return { permitido: false, motivo: "mensajes-dia" };
       }
       return { permitido: true };
     },
