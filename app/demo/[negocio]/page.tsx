@@ -34,9 +34,12 @@ export default async function PaginaDemo({ params }: PageProps<"/demo/[negocio]"
           <Link href="/" className="shrink-0 rounded-md px-1 py-1 text-sm font-medium text-marca hover:text-marca-fuerte">
             ← Negocios
           </Link>
-          <p className="min-w-0 truncate text-sm text-tenue">
-            <span className="font-semibold text-tinta">{nombre}</span> · {giro}
-          </p>
+          <h1 className="min-w-0 truncate text-sm text-tenue">
+            <span className="font-semibold text-tinta" translate="no">
+              {nombre}
+            </span>{" "}
+            · {giro}
+          </h1>
         </div>
       </header>
       {/* Al cliente solo va lo que se muestra del perfil (sin políticas, precios ni preguntas frecuentes). */}

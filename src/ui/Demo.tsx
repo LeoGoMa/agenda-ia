@@ -109,7 +109,7 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
             aria-controls={`vista-${id}`}
             tabIndex={pestana === id ? 0 : -1}
             onClick={() => setPestana(id)}
-            className={`min-h-11 border-b-2 text-sm font-semibold ${pestana === id ? "border-marca text-marca" : "border-transparent text-tenue"}`}
+            className={`min-h-11 border-b-2 text-sm font-semibold ${pestana === id ? "border-marca text-marca" : "border-transparent text-tenue hover:text-tinta"}`}
           >
             {texto}
           </button>
@@ -121,7 +121,7 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
           id="vista-chat"
           role="tabpanel"
           aria-labelledby="pestana-chat"
-          className={`h-[calc(100dvh-8rem)] min-h-[28rem] lg:sticky lg:top-12 lg:h-[min(52rem,calc(100dvh-8rem))] ${pestana === "chat" ? "" : "max-lg:hidden"}`}
+          className={`h-[calc(100dvh-8rem)] min-h-[20rem] lg:sticky lg:top-12 lg:h-[min(52rem,calc(100dvh-8rem))] ${pestana === "chat" ? "" : "max-lg:hidden"}`}
         >
           <Chat perfil={perfil} conversacion={datos?.conversaciones[0]} cargando={datos === null} alCambiar={refrescar} />
         </div>

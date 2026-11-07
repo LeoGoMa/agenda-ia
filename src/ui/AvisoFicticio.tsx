@@ -16,7 +16,7 @@ export function EnlacesForge({ prefijo = "Hecho por" }: { prefijo?: string }) {
   return (
     <span>
       {prefijo}{" "}
-      <a href={FORGE_SITIO} target="_blank" rel="noopener noreferrer" className={enlace}>
+      <a href={FORGE_SITIO} target="_blank" rel="noopener noreferrer" translate="no" className={`${enlace} whitespace-nowrap`}>
         Forge Studio
       </a>{" "}
       ·{" "}

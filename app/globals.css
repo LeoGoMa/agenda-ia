@@ -21,6 +21,15 @@
 
 :root {
   color-scheme: light;
+  /* La franja de aviso es fija arriba: al moverse con Tab o a un ancla, nada queda debajo de ella. */
+  scroll-padding-top: 3rem;
+}
+
+/* Sin la espera del doble toque para hacer zoom en botones y enlaces. */
+a,
+button,
+input {
+  touch-action: manipulation;
 }
 
 body {

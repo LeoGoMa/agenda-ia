@@ -18,7 +18,7 @@ function AvisoAccion({ resultado }: { resultado: Resultado | null }) {
       {resultado && !resultado.ok ? resultado.texto : null}
       {resultado?.estado === 429 ? (
         <span className="mt-1 block">
-          <EnlacesForge prefijo="Escríbenos en" />
+          <EnlacesForge prefijo="Contacto:" />
         </span>
       ) : null}
     </p>
@@ -65,7 +65,7 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
       {ultimo ? (
         <p className="mt-2 line-clamp-2 text-sm text-tenue [overflow-wrap:anywhere]" title={ultimo.texto}>
           <span className="font-medium text-tinta">{AUTOR[ultimo.rol]}:</span>{" "}
-          {ultimo.rol === "bot" ? separarMarcaDemo(ultimo.texto).texto : ultimo.texto}{" "}
+          <bdi>{ultimo.rol === "bot" ? separarMarcaDemo(ultimo.texto).texto : ultimo.texto}</bdi>{" "}
           <time dateTime={ultimo.creadoEn} className="tabular-nums">
             · {etiquetaHora(ultimo.creadoEn, zona)}
           </time>
@@ -100,6 +100,7 @@ function TarjetaConversacion({ conversacion, zona, alCambiar }: { conversacion: 
           <div className="flex gap-2">
             <input
               id={idCampo}
+              name="respuesta"
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               disabled={ocupado}
@@ -149,7 +150,7 @@ export function Panel({
         </p>
       </header>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:items-start">
         <section aria-labelledby="titulo-conversaciones" className="flex flex-col gap-3">
           <h3 id="titulo-conversaciones" className="text-lg font-semibold">
             Conversaciones
@@ -196,7 +197,14 @@ export function Panel({
                               {servicio.get(c.servicioId) ?? c.servicioId}
                             </p>
                             <p className="text-sm text-tenue [overflow-wrap:anywhere]">
-                              {c.cliente.nombre} · <span className="whitespace-nowrap tabular-nums">{formatoTelefono(c.cliente.telefono)}</span>
+                              {/* bdi: un nombre en árabe o hebreo no voltea el orden del teléfono que va después. */}
+                              <bdi>{c.cliente.nombre}</bdi>
+                              {c.cliente.telefono ? (
+                                <>
+                                  {" · "}
+                                  <span className="whitespace-nowrap tabular-nums">{formatoTelefono(c.cliente.telefono)}</span>
+                                </>
+                              ) : null}
                             </p>
                           </div>
                           {/* Casi todas están confirmadas: solo la excepción lleva etiqueta. */}

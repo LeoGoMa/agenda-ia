@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { MensajeVisible } from "../repo/tipos";
 import { EnlacesForge } from "./AvisoFicticio";
 import { pedir, type DatosPanel, type PerfilVista } from "./Demo";
@@ -16,8 +16,11 @@ interface Aviso {
   limite: boolean;
 }
 
-/** Una burbuja: las del visitante a la derecha; las del bot y de la persona del negocio, a la izquierda. */
-function Burbuja({ mensaje, zona }: { mensaje: MensajeVisible; zona: string }) {
+/**
+ * Una burbuja: las del visitante a la derecha; las del bot y de la persona del negocio, a la izquierda.
+ * memo: escribir en el campo no vuelve a formatear las horas de todas las burbujas en cada tecla.
+ */
+const Burbuja = memo(function Burbuja({ mensaje, zona }: { mensaje: MensajeVisible; zona: string }) {
   if (mensaje.rol === "sistema") return <NotaSistema texto={mensaje.texto} />;
   const propio = mensaje.rol === "cliente";
   const { texto, demo } = mensaje.rol === "bot" ? separarMarcaDemo(mensaje.texto) : { texto: mensaje.texto, demo: false };
@@ -32,7 +35,9 @@ function Burbuja({ mensaje, zona }: { mensaje: MensajeVisible; zona: string }) {
             Persona del negocio
           </p>
         ) : null}
-        <p className="text-[0.9375rem] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]">{texto}</p>
+        <p dir="auto" className="text-[0.9375rem] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {texto}
+        </p>
         <p className="mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[0.6875rem] text-tenue">
           {demo ? <span className="rounded-full bg-violet-100 px-1.5 py-px font-medium text-violet-800">demo sin IA</span> : null}
           <time dateTime={mensaje.creadoEn} className="tabular-nums">
@@ -42,7 +47,7 @@ function Burbuja({ mensaje, zona }: { mensaje: MensajeVisible; zona: string }) {
       </div>
     </li>
   );
-}
+});
 
 function NotaSistema({ texto, limite = false }: { texto: string; limite?: boolean }) {
   return (
@@ -51,7 +56,7 @@ function NotaSistema({ texto, limite = false }: { texto: string; limite?: boolea
       {texto}
       {limite ? (
         <span className="mt-1 block">
-          <EnlacesForge prefijo="Escríbenos en" />
+          <EnlacesForge prefijo="Contacto:" />
         </span>
       ) : null}
     </li>
@@ -131,14 +136,14 @@ export function Chat({
           </svg>
         </span>
         <div className="min-w-0">
-          <h2 className="truncate font-semibold" title={perfil.nombre}>
+          <h2 className="truncate font-semibold" title={perfil.nombre} translate="no">
             {perfil.nombre}
           </h2>
           <p className="truncate text-xs text-white/85">{estado}</p>
         </div>
       </header>
 
-      <div ref={lista} role="log" aria-live="polite" aria-label="Mensajes" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      <div ref={lista} role="log" aria-live="polite" aria-label="Mensajes" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
         {cargando ? (
           <p className="pt-8 text-center text-sm text-tenue">Cargando la conversación…</p>
         ) : mensajes.length === 0 && !mostrarPendiente ? (
@@ -189,6 +194,7 @@ export function Chat({
         </label>
         <input
           id={idCampo}
+          name="mensaje"
           ref={campo}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
@@ -196,7 +202,7 @@ export function Chat({
           maxLength={1000}
           autoComplete="off"
           enterKeyHint="send"
-          placeholder="Escribe un mensaje"
+          placeholder="Escribe un mensaje…"
           className="min-h-11 min-w-0 flex-1 rounded-full bg-white px-4 text-[1rem] shadow-sm placeholder:text-stone-500 disabled:bg-stone-100"
         />
         <button

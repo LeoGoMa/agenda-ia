@@ -19,7 +19,8 @@ export const metadata: Metadata = {
     "Demo de un bot que atiende el chat de un negocio: informa precios y horarios, agenda, cambia o cancela citas y pasa la conversación a una persona.",
 };
 
-export const viewport: Viewport = { themeColor: "#115e59", colorScheme: "light" };
+// Del color de la franja de aviso, que es lo primero de cada página.
+export const viewport: Viewport = { themeColor: "#fdf1c7", colorScheme: "light" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

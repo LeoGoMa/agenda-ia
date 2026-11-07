@@ -29,7 +29,7 @@ export default function Inicio() {
             </div>
             <h2 className="mt-2 text-xl font-semibold text-balance [overflow-wrap:anywhere]">
               {/* El enlace cubre la tarjeta entera; su nombre accesible es solo el del negocio. */}
-              <Link href={`/demo/${id}`} className="after:absolute after:inset-0 focus-visible:outline-none">
+              <Link href={`/demo/${id}`} translate="no" className="after:absolute after:inset-0 focus-visible:outline-none">
                 {nombre}
               </Link>
             </h2>
