@@ -1,5 +1,8 @@
 import type { DiaSemana } from "./tipos";
 
+/** Índice = `DiaSemana` (0 = domingo). */
+export const NOMBRE_DIA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"] as const;
+
 /** Fecha "YYYY-MM-DD", hora "HH:MM" y día de la semana de un instante, vistos en la zona IANA `zona`. */
 export function partesLocales(d: Date, zona: string): { fecha: string; hora: string; dia: DiaSemana } {
   const p = Object.fromEntries(
