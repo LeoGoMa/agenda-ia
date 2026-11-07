@@ -14,6 +14,8 @@ interface Aviso {
   texto: string;
   /** 429: además del texto, la salida a Forge Studio. */
   limite: boolean;
+  /** Mensajes de la conversación al ponerlo: se quita en cuanto llega uno nuevo, así nunca queda debajo de él. */
+  base: number;
 }
 
 /**
@@ -105,16 +107,18 @@ export function Chat({
     setTexto("");
     setPendiente({ texto: limpio, base: mensajes.length });
     const r = await pedir("/api/chat", { negocioId: perfil.id, texto: limpio });
-    await alCambiar();
+    const fresco = await alCambiar();
     setPendiente(null);
     setEnviando(false);
+    // Lo que ya trae el panel tras este envío; si no cargó, los de antes de enviar.
+    const base = fresco.ok ? ((fresco.cuerpo as DatosPanel).conversaciones[0]?.mensajes.length ?? 0) : mensajes.length;
     if (!r.ok) {
-      setAviso({ texto: r.texto, limite: r.estado === 429 });
+      setAviso({ texto: r.texto, limite: r.estado === 429, base });
       // Salvo en el 429, el texto vuelve al campo para corregirlo o reintentar.
       if (r.estado !== 429) setTexto((actual) => actual || limpio);
     } else if (estabaEnHumano) {
       // En modo humano el bot no contesta: la respuesta es el aviso de que una persona lo atiende.
-      setAviso({ texto: r.texto, limite: false });
+      setAviso({ texto: r.texto, limite: false, base });
     }
     requestAnimationFrame(() => campo.current?.focus());
   }
@@ -188,7 +192,7 @@ export function Chat({
               <p className="rounded-2xl rounded-bl-md bg-white px-3 py-2 text-sm text-tenue italic shadow-sm motion-safe:animate-pulse">escribiendo…</p>
             </li>
           ) : null}
-          {aviso ? <NotaSistema texto={aviso.texto} limite={aviso.limite} /> : null}
+          {aviso && mensajes.length <= aviso.base ? <NotaSistema texto={aviso.texto} limite={aviso.limite} /> : null}
         </ol>
       </div>
 
