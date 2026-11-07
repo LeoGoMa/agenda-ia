@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ErrorDominio } from "@/src/dominio/tipos";
+import { ErrorDominio, type PerfilNegocio } from "@/src/dominio/tipos";
 import { PERFILES, esquemaPerfil, obtenerPerfil } from "@/src/dominio/perfiles";
 
 // Una corrida de 8 o más dígitos con espacios, guiones, puntos o paréntesis cuenta como teléfono.
@@ -77,6 +77,27 @@ describe("perfiles de ejemplo", () => {
       expect(telefonos(textos).filter((t) => !esFicticio(t)), perfil.id).toEqual([]);
       expect(textos, perfil.id).not.toMatch(/\S+@\S+\.\S+/); // sin correos
     }
+  });
+
+  // Cada caso parte de un perfil válido y le mete un solo error; se revisa el mensaje para saber que falló por esa regla.
+  it.each<[string, (p: PerfilNegocio) => void, string]>([
+    ["abre a la misma hora que cierra", (p) => { p.horario[0].abre = p.horario[0].cierra; }, "abrir antes de cerrar"],
+    ["descanso fuera del horario", (p) => { p.horario[0].descansos = [{ inicio: "18:30", fin: "19:30" }]; }, "descanso debe quedar dentro"],
+    ["día repetido", (p) => { p.horario.push({ ...p.horario[0] }); }, "Día repetido"],
+    ["servicio con id repetido", (p) => { p.servicios.push({ ...p.servicios[0] }); }, "Servicio con id repetido"],
+    ["zona horaria inválida", (p) => { p.zonaHoraria = "Marte/Olympus"; }, "Zona horaria IANA inválida"],
+  ])("esquemaPerfil rechaza: %s", (_, romper, mensaje) => {
+    const perfil = structuredClone(obtenerPerfil("dental"));
+    romper(perfil);
+    const resultado = esquemaPerfil.safeParse(perfil);
+    expect(resultado.success).toBe(false);
+    expect(resultado.error?.issues.map((i) => i.message).join("\n")).toContain(mensaje);
+  });
+
+  it("sin zonaHoraria usa America/Mexico_City", () => {
+    const sinZona: Partial<PerfilNegocio> = structuredClone(obtenerPerfil("dental"));
+    delete sinZona.zonaHoraria;
+    expect(esquemaPerfil.parse(sinZona).zonaHoraria).toBe("America/Mexico_City");
   });
 
   it("obtenerPerfil con id inexistente lanza DATOS_INVALIDOS", () => {
