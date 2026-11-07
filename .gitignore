@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+# caché que deja RTK al correr vitest
+.vitest/
 
 # next.js
 /.next/

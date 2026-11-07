@@ -110,6 +110,15 @@ describe("horariosLibres", () => {
   it("servicio inexistente lanza SERVICIO_INEXISTENTE", () => {
     expect(codigoDe(() => libres(dental, "corte", "2026-11-10"))).toBe("SERVICIO_INEXISTENTE");
   });
+
+  it("falla cerrado ante fechas inválidas", () => {
+    // Una cita con fecha ilegible cuenta como ocupada: un dato corrupto nunca abre un horario de más.
+    const corrupta = { ...cita(dental, "2026-11-10T15:00:00.000Z", 60), inicio: "no es fecha", fin: "tampoco" };
+    expect(libres(dental, "limpieza", "2026-11-10", [corrupta])).toEqual([]);
+    // Con `ahora` inválido no se sabe qué ya pasó, así que no se ofrece nada.
+    const sinReloj = horariosLibres({ perfil: dental, servicioId: "limpieza", fecha: "2026-11-10", citas: [], ahora: new Date(NaN) });
+    expect(sinReloj).toEqual([]);
+  });
 });
 
 describe("cabe", () => {
@@ -123,6 +132,11 @@ describe("cabe", () => {
     expect(cabeDental("2026-11-09T16:00:00.000Z")).toBe(false); // hoy a las 10:00, antes de la anticipación mínima
     expect(cabeDental("2026-11-10T15:00:00.000Z", [cita(dental, "2026-11-10T15:00:00.000Z", 60)])).toBe(false);
     expect(codigoDe(() => cabe(dental, "corte", "2026-11-10T15:00:00.000Z", [], ahora))).toBe("SERVICIO_INEXISTENTE");
+  });
+
+  it("una cita de la tarde que cruza la medianoche UTC cabe en su día local", () => {
+    // Martes 19:00 en CDMX es miércoles 01:00 UTC; la barbería abre el martes hasta las 20:00.
+    expect(cabe(barberia, "corte", "2026-11-11T01:00:00.000Z", [], ahora)).toBe(true);
   });
 
   it("un inicio sin zona o mal escrito lanza DATOS_INVALIDOS", () => {
@@ -141,6 +155,8 @@ describe("tiempo", () => {
     // El día del cambio el desfase de medianoche UTC ya no sirve; hace falta la segunda vuelta.
     expect(iso("2026-03-08", "03:30", "America/New_York")).toBe("2026-03-08T07:30:00.000Z");
     expect(iso("2026-11-10", "09:00", "Asia/Kolkata")).toBe("2026-11-10T03:30:00.000Z");
+    // México quitó el horario de verano en 2022: en julio sigue a UTC-6.
+    expect(iso("2026-07-01", "09:00", "America/Mexico_City")).toBe("2026-07-01T15:00:00.000Z");
 
     expect(partesLocales(new Date("2026-11-11T01:00:00Z"), "America/Mexico_City")).toEqual({
       fecha: "2026-11-10",

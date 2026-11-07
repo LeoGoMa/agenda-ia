@@ -50,10 +50,12 @@ export function horariosLibres({
 
     const etiqueta = aHora(m);
     const inicio = aUtc(fecha, etiqueta, perfil.zonaHoraria).getTime();
-    if (inicio < desde || inicio > hasta) continue;
+    // Con `ahora` inválido, desde y hasta son NaN y la negación descarta el horario.
+    if (!(inicio >= desde && inicio <= hasta)) continue;
 
     const fin = inicio + duracion * MINUTO;
-    const encimadas = confirmadas.filter((c) => Date.parse(c.inicio) < fin && Date.parse(c.fin) > inicio).length;
+    // Escrito como negación para que una fecha inválida (NaN) cuente como encimada: falla cerrado.
+    const encimadas = confirmadas.filter((c) => !(Date.parse(c.fin) <= inicio || Date.parse(c.inicio) >= fin)).length;
     if (encimadas >= capacidadPorHorario) continue;
 
     libres.push({ inicio: new Date(inicio).toISOString(), etiqueta });
