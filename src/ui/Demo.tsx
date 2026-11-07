@@ -58,7 +58,8 @@ const PESTANAS: { id: Pestana; texto: string }[] = [
 /** El chat y el panel del negocio comparten los datos: el panel se pide cada 4 s y tras cada acción. */
 export function Demo({ perfil }: { perfil: PerfilVista }) {
   const [datos, setDatos] = useState<DatosPanel | null>(null);
-  const [avisoCarga, setAvisoCarga] = useState<string | null>(null);
+  // La última petición del panel que falló (401, 429 por sesiones nuevas, 500 o sin red); null si salió bien.
+  const [avisoCarga, setAvisoCarga] = useState<Resultado | null>(null);
   const [pestana, setPestana] = useState<Pestana>("chat");
   const ultima = useRef(0);
 
@@ -71,7 +72,7 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
       setDatos(r.cuerpo as DatosPanel);
       setAvisoCarga(null);
     } else {
-      setAvisoCarga(r.texto);
+      setAvisoCarga(r);
     }
   }, [perfil.id]);
 
@@ -123,7 +124,7 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
           aria-labelledby="pestana-chat"
           className={`h-[calc(100dvh-8rem)] min-h-[20rem] lg:sticky lg:top-12 lg:h-[min(52rem,calc(100dvh-8rem))] ${pestana === "chat" ? "" : "max-lg:hidden"}`}
         >
-          <Chat perfil={perfil} conversacion={datos?.conversaciones[0]} cargando={datos === null} alCambiar={refrescar} />
+          <Chat perfil={perfil} conversacion={datos?.conversaciones[0]} cargando={datos === null} avisoCarga={avisoCarga} alCambiar={refrescar} />
         </div>
         <div id="vista-panel" role="tabpanel" aria-labelledby="pestana-panel" className={`px-4 py-6 sm:px-0 lg:py-0 ${pestana === "panel" ? "" : "max-lg:hidden"}`}>
           <Panel perfil={perfil} datos={datos} avisoCarga={avisoCarga} alCambiar={refrescar} />

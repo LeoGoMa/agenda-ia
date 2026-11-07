@@ -3,7 +3,7 @@
 import { memo, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { MensajeVisible } from "../repo/tipos";
 import { EnlacesForge } from "./AvisoFicticio";
-import { pedir, type DatosPanel, type PerfilVista } from "./Demo";
+import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./Demo";
 import { etiquetaHora, separarMarcaDemo } from "./formato";
 
 /** Frases que entienden Claude y el responder de demostración sin IA. */
@@ -68,11 +68,14 @@ export function Chat({
   perfil,
   conversacion,
   cargando,
+  avisoCarga,
   alCambiar,
 }: {
   perfil: PerfilVista;
   conversacion: DatosPanel["conversaciones"][number] | undefined;
   cargando: boolean;
+  /** Si la primera carga falló, el chat dice por qué en vez de quedarse en «Cargando…». */
+  avisoCarga: Resultado | null;
   alCambiar: () => Promise<void>;
 }) {
   const [texto, setTexto] = useState("");
@@ -144,9 +147,9 @@ export function Chat({
       </header>
 
       <div ref={lista} role="log" aria-live="polite" aria-label="Mensajes" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4">
-        {cargando ? (
+        {cargando && !avisoCarga ? (
           <p className="pt-8 text-center text-sm text-tenue">Cargando la conversación…</p>
-        ) : mensajes.length === 0 && !mostrarPendiente ? (
+        ) : !cargando && mensajes.length === 0 && !mostrarPendiente ? (
           <div className="mx-auto max-w-xs pt-6 text-center">
             <p className="rounded-xl bg-white/70 px-3 py-2 text-sm text-tenue">
               Escribe como si fueras cliente de {perfil.nombre}. Puedes empezar con:
@@ -167,6 +170,7 @@ export function Chat({
           </div>
         ) : null}
         <ol className="flex flex-col gap-2">
+          {cargando && avisoCarga ? <NotaSistema texto={avisoCarga.texto} limite={avisoCarga.estado === 429} /> : null}
           {mensajes.map((m, i) => (
             // Los mensajes solo se agregan al final: el índice es estable.
             <Burbuja key={i} mensaje={m} zona={perfil.zonaHoraria} />

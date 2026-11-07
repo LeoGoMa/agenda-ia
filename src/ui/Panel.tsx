@@ -130,7 +130,7 @@ export function Panel({
 }: {
   perfil: PerfilVista;
   datos: DatosPanel | null;
-  avisoCarga: string | null;
+  avisoCarga: Resultado | null;
   alCambiar: () => Promise<void>;
 }) {
   const servicio = new Map(perfil.servicios.map((s) => [s.id, s.nombre]));
@@ -145,9 +145,9 @@ export function Panel({
           Panel del negocio
         </h2>
         <p className="mt-1 text-sm text-tenue">Lo que ve el negocio. Se actualiza solo cada 4 segundos.</p>
-        <p role="status" className="mt-2 rounded-lg bg-aviso px-3 py-2 text-sm text-amber-950 empty:hidden">
-          {avisoCarga}
-        </p>
+        <div className="mt-2">
+          <AvisoAccion resultado={avisoCarga} />
+        </div>
       </header>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:items-start">
