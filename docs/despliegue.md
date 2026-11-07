@@ -80,7 +80,8 @@ La app ya tiene sus propios límites (mensajes por sesión, por IP, por conversa
 | Modelo | Entrada, por millón de tokens | Salida, por millón de tokens |
 | --- | --- | --- |
 | Claude Opus 5.5 | US$4 | US$20 |
-| Claude Haiku 5.5 | US$0.10 | US$0.50 |
+| Claude Haiku 5.5, con prompts de hasta 100 000 tokens | US$0.10 | US$0.50 |
+| Claude Haiku 5.5, con prompts de más de 100 000 tokens | US$0.50 | US$2.50 |
 
 - Cada mensaje del cliente hace de 1 a 6 llamadas.
 - Cada llamada manda el prompt, las herramientas y el historial. La mayor parte sale de la caché, que cuesta mucho menos.
@@ -103,7 +104,7 @@ Copia cada valor directo a su variable en Vercel y no lo guardes en otro lado. S
 ## 7. Vercel: proyecto y variables
 
 1. En Vercel: **Add New → Project** y elige el repo `LeoGoMa/agenda-ia`. Detecta Next.js solo; no cambies el comando de build. La versión de Node sale de `engines` en `package.json` (22 o más nueva).
-2. **Antes del primer despliegue,** abre **Environment Variables** y agrega todas las de `.env.example` para el entorno **Production**:
+2. **Antes del primer despliegue,** abre **Environment Variables** y agrega todas las de `.env.example`. En cada una marca **solo Production** y desmarca **Preview** y **Development**: así `vercel env pull` nunca trae las llaves de producción a tu `.env.local`. Para probar en local usa el proyecto de pruebas (paso 3).
 
    | Variable | Valor |
    | --- | --- |
@@ -135,7 +136,7 @@ Con la URL de Vercel abierta:
 3. **Claude:** escribe «¿Qué horarios tienen mañana?». La respuesta **no** debe llevar la etiqueta «demo sin IA».
 4. **Agendar:** agenda una cita con un nombre ficticio y un teléfono `55 0000 0099`. Debe salir en el panel.
 5. **Paso a persona:** pide hablar con una persona. El panel pasa a «Modo: Persona». Contesta desde ahí y luego presiona «Devolver al bot».
-6. **Datos guardados:** en Supabase (**Table Editor**), `citas` tiene filas y las claves de `contadores` son hashes largos, sin IP legibles.
+6. **Datos guardados:** en Supabase (**Table Editor**), `citas` tiene filas. Las claves de `contadores` tienen la forma `sesion:<uuid>`, `ip:<hash>`, `sesion-nueva:<hash>` y `conversaciones-nuevas`: las de `ip:` y `sesion-nueva:` llevan un hash largo, y ninguna contiene una IP legible.
 7. **Errores:** en Vercel (**Logs**) no hay errores. Si hay un 500, el registro dice qué falta, por ejemplo «Falta AGENDA_SAL_IP…».
 8. **Cron:** en **Settings → Cron Jobs**, corre el de `/api/limpieza` a mano. Debe responder `{"borradas":0}`; un 401 significa que falta `CRON_SECRET`.
 9. **Caché:** en la consola de Anthropic se ven las llamadas. Tras varios mensajes en la misma conversación, los tokens leídos de caché deben ser más que cero.

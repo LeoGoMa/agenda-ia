@@ -174,7 +174,7 @@ Por encima de todo esto está el límite de gasto mensual de la cuenta de Anthro
 ## Por qué no es un bot de uso general
 
 - **Por diseño.** El producto es la atención de un negocio. Un chatbot que contesta de todo se ve genérico, gasta más y se desvía del objetivo, que es que el cliente agende.
-- **Por regla de la plataforma.** La fase 2 conecta el bot a WhatsApp, y los términos de WhatsApp Business prohíben los chatbots de IA de uso general desde el 15 de enero de 2026.
+- **Por regla de la plataforma.** La fase 2 conecta el bot a WhatsApp. Los términos de WhatsApp Business Solution de Meta, vigentes desde el 15 de enero de 2026, restringen los asistentes de IA de uso general en la plataforma, mientras que los bots de negocio para atención, citas o seguimiento de pedidos siguen permitidos ([TechCrunch, 18 de octubre de 2025](https://techcrunch.com/2025/10/18/whatssapp-changes-its-terms-to-bar-general-purpose-chatbots-from-its-platform/)). Este bot es de los segundos: solo atiende las citas del negocio.
 - **Cómo se cumple en el código:**
   - el prompt solo describe el negocio y le pide al modelo regresar al tema con amabilidad;
   - las herramientas solo leen y cambian citas de ese negocio en la sesión del visitante;
