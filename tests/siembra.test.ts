@@ -3,7 +3,7 @@ import { NOMBRES_FICTICIOS } from "@/src/datos/ficticios";
 import { cabe } from "@/src/dominio/disponibilidad";
 import { PERFILES } from "@/src/dominio/perfiles";
 import { partesLocales } from "@/src/dominio/tiempo";
-import type { Cita } from "@/src/dominio/tipos";
+import { ErrorDominio, type Cita } from "@/src/dominio/tipos";
 import { crearRepoMemoria } from "@/src/repo/memoria";
 import { sembrarCitas } from "@/src/servicio/siembra";
 
@@ -61,6 +61,43 @@ describe("siembra de citas ficticias", () => {
         expect(cita.cliente.telefono).toMatch(/^55000000[1-9]\d$/);
       }
     }
+  });
+
+  it("dentro de cada negocio inserta en serie, y una cita que ya no cabe se omite sin romper la siembra", async () => {
+    const sesionId = crypto.randomUUID();
+    const repo = crearRepoMemoria();
+    const real = repo.citas.crearSiCabe;
+    const enCurso = new Map<string, number>();
+    let maximoEnCurso = 0;
+    const intentadas: Cita[] = [];
+    repo.citas.crearSiCabe = async (cita, capacidad) => {
+      enCurso.set(cita.negocioId, (enCurso.get(cita.negocioId) ?? 0) + 1);
+      maximoEnCurso = Math.max(maximoEnCurso, enCurso.get(cita.negocioId)!);
+      const numero = intentadas.push(cita);
+      try {
+        await new Promise((resolver) => setTimeout(resolver, 0)); // como la ida y vuelta a la base
+        // La segunda cita que llega la rechaza la regla de choque del repositorio.
+        if (numero === 2) throw new ErrorDominio("HORARIO_NO_DISPONIBLE", "Ese horario ya no está disponible");
+        return await real(cita, capacidad);
+      } finally {
+        enCurso.set(cita.negocioId, enCurso.get(cita.negocioId)! - 1);
+      }
+    };
+
+    await sembrarCitas(repo, sesionId, ahora);
+    expect(maximoEnCurso).toBe(1);
+    const rechazada = intentadas[1];
+    for (const perfil of PERFILES) {
+      const guardadas = await repo.citas.listar(sesionId, perfil.id, DESDE, HASTA);
+      const esperadas = intentadas.filter((c) => c.negocioId === perfil.id && c !== rechazada);
+      expect(guardadas.map((c) => c.id).sort(), perfil.id).toEqual(esperadas.map((c) => c.id).sort());
+    }
+  });
+
+  it("un error que no es de horario sí sube: la sesión no queda sembrada a medias en silencio", async () => {
+    const repo = crearRepoMemoria();
+    vi.spyOn(repo.citas, "crearSiCabe").mockRejectedValueOnce(new Error("Supabase: tiempo agotado"));
+    await expect(sembrarCitas(repo, crypto.randomUUID(), ahora)).rejects.toThrow("Supabase: tiempo agotado");
   });
 
   it("es determinista dado el id de sesión y la fecha local: la hora del día no cambia nada", async () => {

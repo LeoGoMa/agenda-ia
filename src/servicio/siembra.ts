@@ -3,7 +3,7 @@ import { NOMBRES_FICTICIOS } from "../datos/ficticios";
 import { horariosLibres } from "../dominio/disponibilidad";
 import { PERFILES } from "../dominio/perfiles";
 import { partesLocales } from "../dominio/tiempo";
-import type { Cita, PerfilNegocio } from "../dominio/tipos";
+import { ErrorDominio, type Cita, type PerfilNegocio } from "../dominio/tipos";
 import type { Repositorio } from "../repo/tipos";
 
 const MINUTO = 60_000;
@@ -59,11 +59,20 @@ function citasDe(perfil: PerfilNegocio, sesionId: string, ahora: Date): Cita[] {
 /**
  * Siembra citas ficticias en los tres negocios de una sesión nueva, para que su agenda se vea ocupada.
  * Deterministas dado el id de sesión y la fecha local: empiezan mañana, así la hora de `ahora` no cambia cuáles salen.
+ * Los negocios van en paralelo; dentro de cada uno, en serie y en el orden en que se sortearon, que es el orden
+ * contra el que `citasDe` revisó que cupieran. Una cita que el repositorio rechaza por horario se omite; otro
+ * error sube.
  */
 export async function sembrarCitas(repo: Repositorio, sesionId: string, ahora: Date): Promise<void> {
   await Promise.all(
-    PERFILES.flatMap((perfil) =>
-      citasDe(perfil, sesionId, ahora).map((cita) => repo.citas.crearSiCabe(cita, perfil.politicas.capacidadPorHorario)),
-    ),
+    PERFILES.map(async (perfil) => {
+      for (const cita of citasDe(perfil, sesionId, ahora)) {
+        try {
+          await repo.citas.crearSiCabe(cita, perfil.politicas.capacidadPorHorario);
+        } catch (e) {
+          if (!(e instanceof ErrorDominio && e.codigo === "HORARIO_NO_DISPONIBLE")) throw e;
+        }
+      }
+    }),
   );
 }
