@@ -4,11 +4,13 @@ import { crearHerramientas } from "../bot/herramientas";
 import { promptDelSistema } from "../bot/prompt";
 import type { RespuestaBot, responder } from "../bot/responder";
 import { obtenerPerfil } from "../dominio/perfiles";
-import { ErrorDominio, type PerfilNegocio } from "../dominio/tipos";
+import type { PerfilNegocio } from "../dominio/tipos";
 import type { Conversacion, Repositorio } from "../repo/tipos";
 import type { Limitador } from "./limites";
 
 const MAX_CARACTERES = 1000;
+/** Tope del historial serializado que se manda a Claude: cada llamada paga todo el historial como entrada. */
+const MAX_HISTORIAL_CARACTERES = 60_000;
 const TEXTOS: Record<PerfilNegocio["trato"], { invalido: string; limite: string; enEspera: string }> = {
   tu: {
     invalido: "Escribe un mensaje de 1 a 1000 caracteres.",
@@ -38,12 +40,17 @@ export interface RespuestaChat {
   modo: Conversacion["modo"];
 }
 
+export type RespuestaPanel = { estado: 200 } | { estado: 400 | 429; respuesta: string };
+
 /** El texto sin espacios a los lados, o null si queda vacío o pasa de 1000 caracteres (un emoji cuenta como uno). */
 function textoValido(texto: unknown): string | null {
   const limpio = typeof texto === "string" ? texto.trim() : "";
   const largo = [...limpio].length;
   return largo >= 1 && largo <= MAX_CARACTERES ? limpio : null;
 }
+
+/** Visitante y persona del negocio comparten el tope por conversación: los dos hacen crecer el historial. */
+const mensajesConversacion = (conv: Conversacion) => conv.mensajes.filter((m) => m.rol === "cliente" || m.rol === "humano").length;
 
 /**
  * Cambia si se edita el perfil o una herramienta y se redespliega. Un historial armado con otra versión
@@ -55,6 +62,7 @@ function versionPrompt(perfil: PerfilNegocio, definiciones: Anthropic.Beta.BetaT
 
 /**
  * Un mensaje del visitante: valida, revisa límites, lo guarda y, si la conversación está con el bot, le contesta.
+ * Con un historial de más de 60 000 caracteres responde el 429 sin llamar a Claude (el historial nunca se recorta).
  * Un negocio inexistente lanza `DATOS_INVALIDOS`; un error del bot sube a quien llama sin guardar el turno a medias.
  */
 export async function manejarMensaje(
@@ -73,13 +81,13 @@ export async function manejarMensaje(
     ip,
     sesionId,
     esNuevaConversacion: conv.mensajesVisitante === 0,
-    mensajesVisitante: conv.mensajesVisitante,
+    mensajesConversacion: mensajesConversacion(conv),
   });
   if (!limite.permitido) return { estado: 429, respuesta: textos.limite, modo: conv.modo };
 
-  await repo.conversaciones.agregarMensaje(conv.id, { rol: "cliente", texto: limpio, creadoEn: ahora().toISOString() });
-
+  const mensajeCliente = { rol: "cliente" as const, texto: limpio, creadoEn: ahora().toISOString() };
   if (conv.modo === "humano") {
+    await repo.conversaciones.agregarMensaje(conv.id, mensajeCliente);
     // También va al historial de la API, para que el bot tenga el contexto si le regresan la conversación.
     await repo.conversaciones.guardarHistorialApi(conv.id, [...conv.historialApi, { role: "user", content: limpio }], conv.versionPrompt);
     return { estado: 200, respuesta: textos.enEspera, modo: "humano" };
@@ -95,12 +103,13 @@ export async function manejarMensaje(
     alPasarAHumano: async () => {},
   });
   const version = versionPrompt(perfil, herramientas.definiciones);
-  const bot = await deps.responder({
-    perfil,
-    historialApi: conv.versionPrompt === version ? conv.historialApi : [],
-    mensaje: limpio,
-    herramientas,
-  });
+  const historialApi = conv.versionPrompt === version ? conv.historialApi : [];
+  if (JSON.stringify(historialApi).length > MAX_HISTORIAL_CARACTERES) {
+    return { estado: 429, respuesta: textos.limite, modo: conv.modo };
+  }
+
+  await repo.conversaciones.agregarMensaje(conv.id, mensajeCliente);
+  const bot = await deps.responder({ perfil, historialApi, mensaje: limpio, herramientas });
   // shortcut: se reemplaza el historial leído al inicio del turno; si durante esos segundos una persona escribe
   // desde el panel, su mensaje queda visible pero sale del historial de la API. Revisar si el panel deja escribir en modo bot.
   await repo.conversaciones.guardarHistorialApi(conv.id, bot.historialApi, version);
@@ -109,18 +118,32 @@ export async function manejarMensaje(
   return { estado: 200, respuesta: bot.texto, modo: bot.pasoAHumano ? "humano" : "bot" };
 }
 
-/** Respuesta de una persona desde el panel. Un texto inválido o una conversación de otra sesión lanzan `DATOS_INVALIDOS`. */
+/**
+ * Respuesta de una persona desde el panel. En la demo el panel lo maneja el mismo visitante, así que pasa por
+ * los mismos límites (sesión, IP y conversación) y los mismos textos de 400 y 429 que sus mensajes.
+ * Una conversación de otra sesión lanza `DATOS_INVALIDOS`.
+ */
 export async function mensajeHumano(
-  { repo, ahora }: Pick<DepsChat, "repo" | "ahora">,
-  { sesionId, conversacionId, texto }: { sesionId: string; conversacionId: string; texto: string },
-): Promise<void> {
-  const limpio = textoValido(texto);
-  if (limpio === null) throw new ErrorDominio("DATOS_INVALIDOS", `El mensaje debe tener de 1 a ${MAX_CARACTERES} caracteres`);
+  { repo, ahora, limitador }: Pick<DepsChat, "repo" | "ahora" | "limitador">,
+  { sesionId, ip, conversacionId, texto }: { sesionId: string; ip: string; conversacionId: string; texto: string },
+): Promise<RespuestaPanel> {
   const conv = await repo.conversaciones.obtener(sesionId, conversacionId);
+  const textos = TEXTOS[obtenerPerfil(conv.negocioId).trato];
+  const limpio = textoValido(texto);
+  if (limpio === null) return { estado: 400, respuesta: textos.invalido };
+  const limite = await limitador.verificar({
+    ip,
+    sesionId,
+    esNuevaConversacion: false,
+    mensajesConversacion: mensajesConversacion(conv),
+  });
+  if (!limite.permitido) return { estado: 429, respuesta: textos.limite };
+
   await repo.conversaciones.agregarMensaje(conv.id, { rol: "humano", texto: limpio, creadoEn: ahora().toISOString() });
   // Va como mensaje `user` marcado: el bot conserva el contexto si le regresan la conversación.
   const historial = [...conv.historialApi, { role: "user", content: `[Respuesta de una persona del negocio]: ${limpio}` }];
   await repo.conversaciones.guardarHistorialApi(conv.id, historial, conv.versionPrompt);
+  return { estado: 200 };
 }
 
 /** Una conversación de otra sesión lanza `DATOS_INVALIDOS`. */

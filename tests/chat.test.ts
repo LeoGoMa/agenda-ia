@@ -54,7 +54,10 @@ const preparar = ({ limites = {}, negocioId = "dental" }: { limites?: Partial<Co
   const enviar = (texto: string, de: { sesionId?: string; ip?: string } = {}) =>
     manejarMensaje(deps, { sesionId, ip: IP, negocioId, texto, ...de });
   const conversacion = (sesion = sesionId) => repo.conversaciones.obtenerOCrear(sesion, negocioId);
-  return { repo, responder, deps, sesionId, enviar, conversacion };
+  /** Una persona del negocio contesta desde el panel, con la cookie de la misma sesión. */
+  const panel = async (texto: string, ip = IP) =>
+    mensajeHumano(deps, { sesionId, ip, conversacionId: (await conversacion()).id, texto });
+  return { repo, responder, deps, sesionId, enviar, conversacion, panel };
 };
 
 describe("límites", () => {
@@ -83,10 +86,10 @@ describe("límites", () => {
   it("el limitador da el motivo de cada límite", async () => {
     const limitador = crearLimitador(almacenMemoria(), POR_DEFECTO);
     const verificar = (cambios: Partial<Parameters<typeof limitador.verificar>[0]>) =>
-      limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: false, mensajesVisitante: 0, ...cambios });
+      limitador.verificar({ ip: IP, sesionId: "s", esNuevaConversacion: false, mensajesConversacion: 0, ...cambios });
 
-    expect(await verificar({ mensajesVisitante: 29 })).toEqual({ permitido: true });
-    expect(await verificar({ mensajesVisitante: 30 })).toEqual({ permitido: false, motivo: "conversacion" });
+    expect(await verificar({ mensajesConversacion: 29 })).toEqual({ permitido: true });
+    expect(await verificar({ mensajesConversacion: 30 })).toEqual({ permitido: false, motivo: "conversacion" });
 
     for (let i = 0; i < 20; i++) expect(await verificar({ sesionId: "una", ip: `ip-sesion-${i}` })).toEqual({ permitido: true });
     expect(await verificar({ sesionId: "una", ip: "ip-sesion-20" })).toEqual({ permitido: false, motivo: "sesion" });
@@ -106,7 +109,7 @@ describe("límites", () => {
 
   it("un mensaje rechazado por sesión o IP no gasta el tope diario", async () => {
     const limitador = crearLimitador(almacenMemoria(), { ...POR_DEFECTO, sesionPorHora: 1, ipPorHora: 2, conversacionesPorDia: 2 });
-    const nueva = (sesionId: string, ip: string) => limitador.verificar({ ip, sesionId, esNuevaConversacion: true, mensajesVisitante: 0 });
+    const nueva = (sesionId: string, ip: string) => limitador.verificar({ ip, sesionId, esNuevaConversacion: true, mensajesConversacion: 0 });
     expect(await nueva("a", "ip-1")).toEqual({ permitido: true }); // diario: 1
     expect(await nueva("a", "ip-2")).toEqual({ permitido: false, motivo: "sesion" });
     expect(await nueva("b", "ip-1")).toEqual({ permitido: true }); // diario: 2
@@ -287,6 +290,31 @@ describe("manejarMensaje", () => {
     expect((await barberia.conversacion()).versionPrompt).not.toBe(antes.versionPrompt);
   });
 
+  it("con un historial de más de 60 000 caracteres no se llama al bot", async () => {
+    const { repo, enviar, responder, conversacion } = preparar();
+    await enviar("Hola");
+    const { id, versionPrompt } = await conversacion();
+    // Un historial que, serializado, mide exactamente `largo` caracteres.
+    const vacio = JSON.stringify([{ role: "user", content: "" }]).length;
+    const historialDe = (largo: number) => [{ role: "user", content: "a".repeat(largo - vacio) }];
+
+    await repo.conversaciones.guardarHistorialApi(id, historialDe(60_001), versionPrompt);
+    expect(await enviar("¿Siguen ahí?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
+    expect(responder).toHaveBeenCalledTimes(1);
+    const rechazada = await conversacion();
+    expect(rechazada.mensajes).toHaveLength(2); // el mensaje no se guarda
+    expect(rechazada.historialApi).toEqual(historialDe(60_001)); // y el historial no se recorta
+
+    await repo.conversaciones.guardarHistorialApi(id, historialDe(60_000), versionPrompt);
+    expect((await enviar("¿Siguen ahí?")).estado).toBe(200);
+    expect(responder).toHaveBeenCalledTimes(2);
+
+    // Cuenta lo que se mandaría: un historial de otra versión del prompt no se reenvía.
+    await repo.conversaciones.guardarHistorialApi(id, historialDe(60_001), "version-anterior");
+    expect((await enviar("¿Y ahora?")).estado).toBe(200);
+    expect(responder.mock.calls[2][0].historialApi).toEqual([]);
+  });
+
   it("si el bot falla, el error sube y no queda un turno a medias", async () => {
     const { enviar, responder, conversacion } = preparar();
     await enviar("Hola");
@@ -317,7 +345,9 @@ describe("panel", () => {
     const antes = await conversacion();
     await deps.repo.conversaciones.cambiarModo(sesionId, antes.id, "humano");
 
-    await mensajeHumano(deps, { sesionId, conversacionId: antes.id, texto: "  Sí, 10% con credencial vigente.  " });
+    expect(await mensajeHumano(deps, { sesionId, ip: IP, conversacionId: antes.id, texto: "  Sí, 10% con credencial vigente.  " })).toEqual({
+      estado: 200,
+    });
 
     const despues = await conversacion();
     expect(despues.mensajes.at(-1)).toEqual({ rol: "humano", texto: "Sí, 10% con credencial vigente.", creadoEn: ahora.toISOString() });
@@ -330,11 +360,40 @@ describe("panel", () => {
     expect(despues.versionPrompt).toBe(antes.versionPrompt);
 
     for (const texto of ["", " ", "a".repeat(1001)]) {
-      await expect(mensajeHumano(deps, { sesionId, conversacionId: antes.id, texto }), texto.slice(0, 5)).rejects.toMatchObject({
-        codigo: "DATOS_INVALIDOS",
+      expect(await mensajeHumano(deps, { sesionId, ip: IP, conversacionId: antes.id, texto }), texto.slice(0, 5)).toEqual({
+        estado: 400,
+        respuesta: TEXTOS.usted.invalido,
       });
     }
-    expect((await conversacion()).mensajes).toHaveLength(3);
+    expect(await conversacion()).toEqual(despues);
+  });
+
+  it("mensajeHumano pasa por los límites: al pasarlos da 429 y no agrega nada", async () => {
+    // Sesión: los mensajes de la persona cuentan junto con los del visitante.
+    const porSesion = preparar({ limites: { sesionPorHora: 2 } });
+    await porSesion.enviar("Hola");
+    expect(await porSesion.panel("Hola, le atiende recepción.")).toEqual({ estado: 200 });
+    const antes = await porSesion.conversacion();
+    expect(await porSesion.panel("¿Sigue ahí?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite });
+    expect(await porSesion.conversacion()).toEqual(antes); // ni mensaje visible ni historial
+
+    // IP: cuenta la IP desde donde escribe la persona.
+    const porIp = preparar({ limites: { ipPorHora: 2 } });
+    await porIp.enviar("Hola");
+    expect(await porIp.panel("Hola")).toEqual({ estado: 200 });
+    expect(await porIp.panel("Hola")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite });
+    expect(await porIp.panel("Hola", "203.0.113.8")).toEqual({ estado: 200 });
+
+    // Conversación: visitante y persona suman al mismo tope.
+    const porConversacion = preparar({ limites: { mensajesPorConversacion: 3 } });
+    await porConversacion.enviar("Hola");
+    await porConversacion.panel("Hola, le atiende recepción.");
+    await porConversacion.enviar("¿Me agenda una limpieza?");
+    const llena = await porConversacion.conversacion();
+    expect(await porConversacion.panel("Claro")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite });
+    expect(await porConversacion.enviar("¿Hola?")).toEqual({ estado: 429, respuesta: TEXTOS.usted.limite, modo: "bot" });
+    expect(await porConversacion.conversacion()).toEqual(llena);
+    expect(porConversacion.responder).toHaveBeenCalledTimes(2);
   });
 
   it("devolverAlBot regresa a modo bot", async () => {
@@ -342,7 +401,7 @@ describe("panel", () => {
     await enviar("Hola");
     const { id } = await conversacion();
     await deps.repo.conversaciones.cambiarModo(sesionId, id, "humano");
-    await mensajeHumano(deps, { sesionId, conversacionId: id, texto: "Hola, le atiende recepción." });
+    await mensajeHumano(deps, { sesionId, ip: IP, conversacionId: id, texto: "Hola, le atiende recepción." });
 
     await devolverAlBot(deps, { sesionId, conversacionId: id });
     expect((await conversacion()).modo).toBe("bot");
@@ -366,7 +425,7 @@ describe("panel", () => {
     await deps.repo.conversaciones.cambiarModo(sesionId, id, "humano");
     const intrusa = crypto.randomUUID();
 
-    await expect(mensajeHumano(deps, { sesionId: intrusa, conversacionId: id, texto: "Hola" })).rejects.toMatchObject({
+    await expect(mensajeHumano(deps, { sesionId: intrusa, ip: IP, conversacionId: id, texto: "Hola" })).rejects.toMatchObject({
       codigo: "DATOS_INVALIDOS",
     });
     await expect(devolverAlBot(deps, { sesionId: intrusa, conversacionId: id })).rejects.toMatchObject({

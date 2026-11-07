@@ -10,7 +10,7 @@ export interface AlmacenContadores {
 export interface ConfigLimites {
   sesionPorHora: number;
   ipPorHora: number;
-  /** Mensajes del visitante por conversación. */
+  /** Mensajes por conversación, del visitante y de la persona del negocio juntos: así el historial tiene tope. */
   mensajesPorConversacion: number;
   /** Conversaciones nuevas al día, entre todos los visitantes. */
   conversacionesPorDia: number;
@@ -36,22 +36,23 @@ export function limitesDesdeEntorno(env: Record<string, string | undefined> = pr
 export function crearLimitador(almacen: AlmacenContadores, config: ConfigLimites) {
   return {
     /**
-     * Cada mensaje del visitante pasa por aquí antes de guardarse o de llamar a Claude. El tope por conversación
-     * no gasta contadores, y cada contador solo se toca si pasaron los anteriores: así un visitante rechazado
-     * por sesión o IP no se acaba el tope diario de todos.
+     * Cada mensaje del visitante o de la persona del negocio pasa por aquí antes de guardarse o de llamar a Claude.
+     * El tope por conversación no gasta contadores, y cada contador solo se toca si pasaron los anteriores:
+     * así un visitante rechazado por sesión o IP no se acaba el tope diario de todos.
      */
     async verificar({
       ip,
       sesionId,
       esNuevaConversacion,
-      mensajesVisitante,
+      mensajesConversacion,
     }: {
       ip: string;
       sesionId: string;
       esNuevaConversacion: boolean;
-      mensajesVisitante: number;
+      /** Mensajes del visitante y de la persona del negocio que ya tiene la conversación. */
+      mensajesConversacion: number;
     }): Promise<Verificacion> {
-      if (mensajesVisitante >= config.mensajesPorConversacion) return { permitido: false, motivo: "conversacion" };
+      if (mensajesConversacion >= config.mensajesPorConversacion) return { permitido: false, motivo: "conversacion" };
       if ((await almacen.incrementar(`sesion:${sesionId}`, HORA_SEG)) > config.sesionPorHora) {
         return { permitido: false, motivo: "sesion" };
       }
