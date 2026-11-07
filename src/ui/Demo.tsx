@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { crearRefresco, pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api";
 import { Chat } from "./Chat";
 import { Panel } from "./Panel";
 
 const INTERVALO_MS = 4000;
+/** El `lg` de Tailwind: desde ese ancho el chat y el panel van en dos columnas, sin pestañas. */
+const DOS_COLUMNAS = "(min-width: 64rem)";
+
+function alCambiarAncho(avisar: () => void) {
+  const consulta = matchMedia(DOS_COLUMNAS);
+  consulta.addEventListener("change", avisar);
+  return () => consulta.removeEventListener("change", avisar);
+}
 
 type Pestana = "chat" | "panel";
 const PESTANAS: { id: Pestana; texto: string }[] = [
@@ -19,6 +27,8 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
   // La última petición del panel que falló (401, 429 por sesiones nuevas, 500 o sin red); null si salió bien.
   const [avisoCarga, setAvisoCarga] = useState<Resultado | null>(null);
   const [pestana, setPestana] = useState<Pestana>("chat");
+  // Al prerenderizar se supone celular; al hidratar React lo corrige sin error de hidratación.
+  const dosColumnas = useSyncExternalStore(alCambiarAncho, () => matchMedia(DOS_COLUMNAS).matches, () => false);
 
   const { refrescar, sondear } = useMemo(
     () =>
@@ -57,36 +67,41 @@ export function Demo({ perfil }: { perfil: PerfilVista }) {
     document.getElementById(`pestana-${otra}`)?.focus();
   };
 
+  // Las pestañas solo existen en celular; en dos columnas el chat y el panel ya son secciones con nombre.
+  const vista = (id: Pestana) => (dosColumnas ? {} : { role: "tabpanel", "aria-labelledby": `pestana-${id}` });
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-0 sm:px-4 lg:py-6">
-      <div role="tablist" aria-label="Vista de la demo" onKeyDown={alTeclear} className="grid grid-cols-2 border-b border-borde bg-white lg:hidden">
-        {PESTANAS.map(({ id, texto }) => (
-          <button
-            key={id}
-            id={`pestana-${id}`}
-            role="tab"
-            type="button"
-            aria-selected={pestana === id}
-            aria-controls={`vista-${id}`}
-            tabIndex={pestana === id ? 0 : -1}
-            onClick={() => setPestana(id)}
-            className={`min-h-11 border-b-2 text-sm font-semibold ${pestana === id ? "border-marca text-marca" : "border-transparent text-tenue hover:text-tinta"}`}
-          >
-            {texto}
-          </button>
-        ))}
-      </div>
+      {dosColumnas ? null : (
+        // lg:hidden también: el HTML prerenderizado supone celular hasta que hidrata.
+        <div role="tablist" aria-label="Vista de la demo" onKeyDown={alTeclear} className="grid grid-cols-2 border-b border-borde bg-white lg:hidden">
+          {PESTANAS.map(({ id, texto }) => (
+            <button
+              key={id}
+              id={`pestana-${id}`}
+              role="tab"
+              type="button"
+              aria-selected={pestana === id}
+              aria-controls={`vista-${id}`}
+              tabIndex={pestana === id ? 0 : -1}
+              onClick={() => setPestana(id)}
+              className={`min-h-11 border-b-2 text-sm font-semibold ${pestana === id ? "border-marca text-marca" : "border-transparent text-tenue hover:text-tinta"}`}
+            >
+              {texto}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex-1 lg:grid lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-8">
         <div
           id="vista-chat"
-          role="tabpanel"
-          aria-labelledby="pestana-chat"
+          {...vista("chat")}
           className={`h-[calc(100dvh-8rem)] min-h-[20rem] lg:sticky lg:top-12 lg:h-[min(52rem,calc(100dvh-8rem))] ${pestana === "chat" ? "" : "max-lg:hidden"}`}
         >
           <Chat perfil={perfil} conversacion={datos?.conversaciones[0]} cargando={datos === null} avisoCarga={avisoCarga} alCambiar={refrescar} />
         </div>
-        <div id="vista-panel" role="tabpanel" aria-labelledby="pestana-panel" className={`px-4 py-6 sm:px-0 lg:py-0 ${pestana === "panel" ? "" : "max-lg:hidden"}`}>
+        <div id="vista-panel" {...vista("panel")} className={`px-4 py-6 sm:px-0 lg:py-0 ${pestana === "panel" ? "" : "max-lg:hidden"}`}>
           <Panel perfil={perfil} datos={datos} avisoCarga={avisoCarga} alCambiar={refrescar} />
         </div>
       </div>
