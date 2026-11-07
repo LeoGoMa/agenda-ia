@@ -12,7 +12,7 @@ export async function POST(peticion: Request) {
   return conSesion(peticion, "POST /api/chat", async (sesionId, deps) => {
     const cuerpo = await cuerpoDe(peticion, esquema);
     if (!cuerpo) return solicitudInvalida();
-    const { estado, respuesta, modo } = await manejarMensaje(deps, { sesionId, ip: ipDe(peticion), ...cuerpo });
+    const { estado, respuesta, modo } = await manejarMensaje(deps, { ...cuerpo, sesionId, ip: ipDe(peticion) });
     return Response.json({ respuesta, modo }, { status: estado });
   });
 }

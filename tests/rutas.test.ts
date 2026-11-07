@@ -343,6 +343,31 @@ describe("rutas del chat y el panel", () => {
     expect((await ana.verPanel()).cuerpo.conversaciones[0].modo).toBe("bot");
   });
 
+  it("el cuerpo nunca pisa la sesión ni la IP: salen de la cookie y de x-forwarded-for", async () => {
+    ponerDeps(armarDeps({ NODE_ENV: "test", AGENDA_LIMITE_IP_HORA: "3" }));
+    const ana = visitante(undefined, "198.51.100.4");
+    const beto = visitante();
+    await ana.escribir("Hola");
+    // Cada vez otra IP en el cuerpo: si se usara, el límite por IP nunca llegaría.
+    const ajeno = (i: number) => ({ sesionId: ana.sesion, ip: `192.0.2.${i}` });
+    const chatDeBeto = async (i: number) =>
+      leer(await chat(peticion("/api/chat", { sesion: beto.sesion, cuerpo: { negocioId: "dental", texto: "Hola", ...ajeno(i) } })));
+
+    expect((await chatDeBeto(1)).estado).toBe(200);
+    const [deBeto] = (await beto.verPanel()).cuerpo.conversaciones;
+    // Con la sesión de Ana, la conversación de Beto no existiría (400).
+    const respuesta = await panelMensaje(
+      peticion("/api/panel/mensaje", { sesion: beto.sesion, cuerpo: { conversacionId: deBeto.id, texto: "Hola", ...ajeno(2) } }),
+    );
+    expect(await leer(respuesta)).toEqual({ estado: 200, cuerpo: { ok: true } });
+    expect((await chatDeBeto(3)).estado).toBe(200);
+    expect((await chatDeBeto(4)).estado).toBe(429); // cuarto mensaje desde la IP del encabezado
+
+    expect((await ana.verPanel()).cuerpo.conversaciones[0].mensajes).toHaveLength(2);
+    expect((await beto.verPanel()).cuerpo.conversaciones[0].mensajes).toHaveLength(5);
+    expect((await ana.escribir("Hola")).estado).toBe(200);
+  });
+
   it("no se puede tocar la conversación de otra sesión desde el panel", async () => {
     const ana = visitante();
     const beto = visitante();

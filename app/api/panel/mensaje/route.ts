@@ -9,7 +9,7 @@ export async function POST(peticion: Request) {
   return conSesion(peticion, "POST /api/panel/mensaje", async (sesionId, deps) => {
     const cuerpo = await cuerpoDe(peticion, esquema);
     if (!cuerpo) return solicitudInvalida();
-    const resultado = await mensajeHumano(deps, { sesionId, ip: ipDe(peticion), ...cuerpo });
+    const resultado = await mensajeHumano(deps, { ...cuerpo, sesionId, ip: ipDe(peticion) });
     if (resultado.estado === 200) return Response.json({ ok: true });
     return Response.json({ respuesta: resultado.respuesta }, { status: resultado.estado });
   });
