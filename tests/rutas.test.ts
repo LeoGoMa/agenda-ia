@@ -169,6 +169,8 @@ describe("responderDev", () => {
     ]);
     // El horario agendado ya no se ofrece: la disponibilidad sale del repositorio.
     expect((await decir("horarios")).texto).toContain("11:30, 12:00 y 12:30");
+    // Solo «cuando» lo reconoce, y solo si se le quita el acento a «Cuándo».
+    expect((await decir("¿Cuándo hay lugar?")).texto).toContain("Primeros horarios libres");
   });
 
   it("si no hay horarios en los próximos 14 días lo dice y no agenda", async () => {

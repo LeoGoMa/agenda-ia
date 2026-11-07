@@ -15,7 +15,7 @@ const diaLargo = (fecha: string) =>
     .replace(",", "");
 
 /** Sin acentos y en minúsculas, para reconocer palabras clave. */
-const normal = (texto: string) => texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const normal = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 /**
  * Responder guionado para desarrollo sin `ANTHROPIC_API_KEY`: no usa la red. Reconoce tres pedidos y para
