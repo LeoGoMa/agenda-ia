@@ -6,7 +6,7 @@
 
 Los negocios que trabajan con citas pierden clientes cuando nadie contesta el chat a tiempo. Agenda IA contesta por ellos: da precios y horarios, revisa la disponibilidad real, agenda, cambia o cancela citas y pasa la conversación a una persona cuando hace falta.
 
-**Demo en vivo:** _(pendiente de desplegar)_
+**Demo en vivo:** [agenda-ia-nu.vercel.app](https://agenda-ia-nu.vercel.app) (negocios ficticios, datos de demostración)
 
 ![Demo de Agenda IA en escritorio: el chat del cliente a la izquierda y el panel del negocio a la derecha](docs/img/demo-escritorio.png)
 

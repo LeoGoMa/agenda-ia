@@ -6,7 +6,7 @@
 
 Businesses that work by appointment lose bookings when nobody answers the chat in time. Agenda IA answers for them: it gives prices and opening hours, checks real availability, books, reschedules or cancels appointments, and hands the conversation to a person when needed.
 
-**Live demo:** _(pending deployment)_
+**Live demo:** [agenda-ia-nu.vercel.app](https://agenda-ia-nu.vercel.app) (fictional businesses, demo data)
 
 ![Agenda IA demo on desktop: the customer chat on the left and the business panel on the right](docs/img/demo-escritorio.png)
 
