@@ -1,10 +1,11 @@
+import type { Proveedor } from "../bot/proveedor";
 import type { Cita, PerfilNegocio } from "../dominio/tipos";
 import type { Conversacion } from "../repo/tipos";
 import { textoDeAviso } from "./formato";
 
 const SIN_CONEXION = "No hay conexión. Revisa tu internet e inténtalo de nuevo.";
 
-/** Lo que la página manda del perfil: solo lo que se muestra. */
+/** Lo que la página manda del perfil: solo lo que se muestra, más quién contesta (para el aviso de privacidad). */
 export interface PerfilVista {
   id: string;
   nombre: string;
@@ -12,6 +13,7 @@ export interface PerfilVista {
   zonaHoraria: string;
   servicios: { id: string; nombre: string }[];
   trato: PerfilNegocio["trato"];
+  proveedor: Proveedor;
 }
 
 /** Lo que devuelve GET /api/panel. */

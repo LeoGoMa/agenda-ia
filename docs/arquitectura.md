@@ -4,7 +4,7 @@ Cómo está hecho por dentro: las capas, el camino de un mensaje y las reglas qu
 
 ## Capas
 
-Cada capa solo depende de las de abajo. El dominio no sabe de la base de datos (solo usa la interfaz del repositorio), el bot no sabe de HTTP y la interfaz no sabe de Claude.
+Cada capa solo depende de las de abajo. El dominio no sabe de la base de datos (solo usa la interfaz del repositorio), el bot no sabe de HTTP y la interfaz no sabe del modelo: solo recibe el nombre del proveedor para el aviso de privacidad.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -25,11 +25,12 @@ Cada capa solo depende de las de abajo. El dominio no sabe de la base de datos (
 │   deps.ts: arma repositorio, limitador y responder según el entorno.        │
 └───────┬───────────────────────────────────────────────┬────────────────────┘
 ┌───────▼───────────────────────────────┐   ┌───────────▼────────────────────┐
-│ Bot              src/bot/              │   │ API de Claude                  │
-│   prompt.ts: prompt fijo del perfil.   │──►│ client.beta.messages.create    │
-│   herramientas.ts: 8 herramientas.     │◄──│ (herramientas, caché,          │
-│   responder.ts: bucle de herramientas. │   │  fallbacks del servidor)       │
-│   responderDev.ts: guionado, sin red.  │   └────────────────────────────────┘
+│ Bot              src/bot/              │   │ Claude o Gemini                │
+│   prompt.ts: prompt fijo del perfil.   │──►│ según la llave; con las dos,   │
+│   herramientas.ts: 8 herramientas.     │◄──│ Claude. Mismas herramientas y  │
+│   responder.ts: bucle, con Claude.     │   │ mismo prompt.                  │
+│   responderGemini.ts: el mismo, Gemini.│   └────────────────────────────────┘
+│   responderDev.ts: guionado, sin red.  │
 └───────┬───────────────────────────────┘
 ┌───────▼────────────────────────────────────────────────────────────────────┐
 │ Dominio             src/dominio/                                            │
@@ -61,13 +62,15 @@ Los perfiles de los tres negocios ficticios están en `src/datos/negocios/*.json
    3. calcula `versionPrompt`, un hash del prompt, las herramientas y el modelo efectivo. Si cambió desde el último turno (se editó un perfil o se cambió el modelo y se redesplegó), arranca un historial de API nuevo y conserva los mensajes visibles;
    4. en modo bot, si el historial pasa de 120 000 caracteres, responde 429 sin gastar contadores;
    5. pasa por el limitador (ver «Límites»); si se pasa de algún límite, 429 con el texto en el trato del negocio (usted o tú);
-   6. si la conversación está en modo persona, guarda el mensaje, lo agrega al historial de la API y responde «Le atiende una persona…» sin llamar a Claude.
+   6. si la conversación está en modo persona, guarda el mensaje, lo agrega al historial de la API y responde «Le atiende una persona…» sin llamar al modelo.
 
    En el texto que va al historial de la API (en los dos modos), la marca `[Respuesta de una persona del negocio]` pasa a paréntesis: así el visitante no se hace pasar por la persona del negocio. El mensaje visible queda como lo escribió.
 4. **El bot** (`responder`, en `src/bot/responder.ts`) corre un bucle propio de herramientas:
    - cada vuelta llama a `client.beta.messages.create` con el prompt del sistema del negocio, las 8 herramientas y el historial;
    - si el modelo pide herramientas, se ejecutan hasta 4 por vuelta (validadas con Zod); las demás reciben un `tool_result` de error (`NO_EJECUTADA`), y todos los resultados vuelven en un solo mensaje `user`;
    - termina con `end_turn`, con `refusal` o al llegar a 6 vueltas. Con `max_tokens` o en la vuelta 6, las herramientas pendientes **no se ejecutan** (no se agenda nada a ciegas): reciben un `tool_result` de error y el cliente ve un texto de respaldo.
+
+   Con Gemini, `responderGemini` (`src/bot/responderGemini.ts`) corre el mismo bucle con los mismos topes, textos y herramientas; lo que cambia está en «Cómo se usa la API de Gemini».
 5. **Se guarda el turno:** el historial de la API completo (con los bloques de pensamiento y de fallback tal como llegaron), el mensaje visible del bot y, si el bot usó `pasar_a_humano`, el modo persona.
 6. **La interfaz** vuelve a pedir el panel. El sondeo de 4 s se salta el tic si ya hay una petición en curso, y solo se aplica la respuesta más reciente (`crearRefresco`, en `src/ui/api.ts`).
 
@@ -128,7 +131,7 @@ Las RPC de Postgres son `security definer` con `search_path` fijo, y solo `servi
 
 ## Límites
 
-Todos se revisan **antes** de llamar a Claude. Las variables son opcionales y se validan como enteros positivos.
+Todos se revisan **antes** de llamar al modelo. Las variables son opcionales y se validan como enteros positivos.
 
 | Límite | Variable | Por defecto |
 | --- | --- | --- |
@@ -142,7 +145,7 @@ Todos se revisan **antes** de llamar a Claude. Las variables son opcionales y se
 | Vueltas de herramientas por mensaje | constante | 6 |
 | Herramientas ejecutadas por vuelta | constante | 4 |
 | Caracteres por mensaje | constante | 1000 |
-| Caracteres del historial que se manda a Claude | constante | 120 000 |
+| Caracteres del historial que se manda al modelo | constante | 120 000 |
 
 Cómo funciona el limitador (`src/servicio/limites.ts`):
 
@@ -153,7 +156,7 @@ Cómo funciona el limitador (`src/servicio/limites.ts`):
 - **La IP sale del primer valor de `x-forwarded-for`:** es confiable solo en Vercel, que lo reescribe con la IP del cliente.
 - **Lo que ve el cliente:** al llegar a un límite, un 429 con un texto amable y la liga a Forge Studio.
 
-Por encima de todo esto, configura un límite de gasto mensual en la cuenta de Anthropic antes de desplegar ([guía de despliegue](despliegue.md#5-límite-de-gasto-en-anthropic)).
+Por encima de todo esto, con Claude configura un límite de gasto mensual en la cuenta de Anthropic antes de desplegar ([guía de despliegue](despliegue.md#5-si-usas-claude-límite-de-gasto-en-anthropic)). Con Gemini en su plan gratis no hay cobro: al pasar la cuota, Google responde 429 y el bot avisa que tiene demasiadas consultas.
 
 ## Cómo se usa la API de Claude
 
@@ -166,6 +169,22 @@ Por encima de todo esto, configura un límite de gasto mensual en la cuenta de A
   - el `cache_control` de nivel superior cachea además la conversación que va creciendo;
   - el prompt es determinista: sin fechas ni ids.
 - **El historial solo crece.** Las respuestas del asistente se guardan con su `content` completo, sin quitar bloques de pensamiento ni de fallback. En Postgres la columna es `json` y no `jsonb`, porque `jsonb` reordena las llaves y un `tool_use` reenviado con otro orden rompe la caché.
+## Cómo se usa la API de Gemini
+
+La demo usa Gemini porque su plan gratis no cobra. El bot elige con `proveedorDesdeEntorno` (`src/bot/proveedor.ts`): Claude si está `ANTHROPIC_API_KEY`, si no Gemini con `GEMINI_API_KEY`. Cambiar de proveedor cambia el modelo efectivo, y con él `versionPrompt`, así que el historial de la API arranca de nuevo.
+
+- **Solo con el SDK oficial** (`@google/genai`, fijado en 2.31.0), con `models.generateContent`.
+- **Modelo:** `GEMINI_MODEL`, por defecto `gemini-3.5-flash-lite`. **Pensamiento:** `thinkingLevel: LOW`. La temperatura queda en su valor por defecto, porque Google recomienda no bajarla en los modelos 3.x.
+- **Las mismas herramientas:** cada definición de Claude pasa con su nombre, su descripción y su JSON Schema como `parametersJsonSchema`, sin `strict`, que Gemini no conoce. `functionCallingConfig: AUTO`.
+- **Firmas de pensamiento:** el `content` del modelo se guarda tal cual. Con los modelos 3.x, si en el turno en curso falta la `thoughtSignature` de un `functionCall`, la API responde 400.
+- **Resultados:** cada `functionCall` recibe un `functionResponse` con su mismo `id` y nombre, con `{ output }` o `{ error }`, y todos vuelven en un solo mensaje `user`. Una herramienta sin parámetros llega sin `args`.
+- **Bloqueos:** un `finishReason` de seguridad (`SAFETY`, `PROHIBITED_CONTENT`, `BLOCKLIST`, `SPII`, `RECITATION`) o un `promptFeedback.blockReason` vale lo mismo que el `refusal` de Claude: disculpa y oferta de pasar con una persona, con la misma regla para el mensaje del visitante.
+- **Cuota:** un 429 (cuota agotada) o un 503 (modelo saturado) deja una línea en el registro, solo con el código, y sigue la misma regla. En la primera vuelta el visitante ve «Ahorita tengo demasiadas consultas…». Después de alguna herramienta ve «Se me juntaron muchas consultas antes de terminar…», que avisa que algo pudo quedar guardado, para que no repita el pedido a ciegas y duplique la cita. Otros errores suben a la ruta, que responde 500.
+- **Historial mezclado:** el modo persona agrega mensajes `{ role, content: texto }`; al mandarlos a Gemini se convierten a `parts`.
+- **Plan gratis:** 15 consultas por minuto por modelo (medido el 2026-11-10) y un tope diario que se ve en AI Studio. Google puede usar lo que se le manda para mejorar sus productos, y el aviso bajo el chat lo dice.
+
+## Desarrollo sin llave
+
 - **Sin llave, en desarrollo:** `responderDev` usa las mismas herramientas reales (disponibilidad, agendar y pasar a una persona) con un guion fijo. El flujo de la demo funciona igual, sin red, y cada respuesta lleva la marca «demo sin IA».
 
 ## Zona horaria

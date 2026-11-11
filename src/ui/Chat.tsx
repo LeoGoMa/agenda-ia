@@ -6,7 +6,7 @@ import { pedir, type DatosPanel, type PerfilVista, type Resultado } from "./api"
 import { EnlacesForge } from "./AvisoFicticio";
 import { avisoPrivacidad, etiquetaHora, separarMarcaDemo } from "./formato";
 
-/** Frases que entienden Claude y el responder de demostración sin IA. */
+/** Frases que entienden el modelo (Claude o Gemini) y el responder de demostración sin IA. */
 const SUGERENCIAS = ["¿Qué horarios tienen?", "Quiero agendar una cita", "Quiero hablar con una persona"];
 const QUIEN: Record<MensajeVisible["rol"], string> = { cliente: "Tú", bot: "Bot", humano: "Persona del negocio", sistema: "Aviso" };
 
@@ -236,7 +236,7 @@ export function Chat({
       </form>
       {/* Siempre a la vista bajo el campo; tenue sobre el fondo del chat da 6:1 (AA). */}
       <p id={idPrivacidad} className="shrink-0 px-4 pb-3 text-center text-xs leading-snug text-tenue">
-        {avisoPrivacidad(perfil.trato)}
+        {avisoPrivacidad(perfil.trato, perfil.proveedor)}
       </p>
     </section>
   );

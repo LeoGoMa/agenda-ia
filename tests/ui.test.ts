@@ -154,11 +154,20 @@ describe("crearRefresco (el sondeo del panel)", () => {
 
 describe("avisoPrivacidad", () => {
   it("pide datos inventados y dice quién procesa los mensajes y cuándo se borran, en el trato del negocio", () => {
-    expect(avisoPrivacidad("tu")).toBe(
+    expect(avisoPrivacidad("tu", "claude")).toBe(
       "Usa nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.",
     );
-    expect(avisoPrivacidad("usted")).toBe(
+    expect(avisoPrivacidad("usted", "claude")).toBe(
       "Use nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.",
+    );
+  });
+
+  it("con Gemini avisa que Google puede usar los mensajes, porque es el plan gratis", () => {
+    expect(avisoPrivacidad("tu", "gemini")).toBe(
+      "Usa nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Gemini (Google), que puede usarlos para mejorar sus productos; aquí se borran a los 7 días.",
+    );
+    expect(avisoPrivacidad("usted", "gemini")).toBe(
+      "Use nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Gemini (Google), que puede usarlos para mejorar sus productos; aquí se borran a los 7 días.",
     );
   });
 });

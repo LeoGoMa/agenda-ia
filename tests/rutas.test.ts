@@ -8,6 +8,7 @@ import { POST as panelModo } from "@/app/api/panel/modo/route";
 import { GET as panel } from "@/app/api/panel/route";
 import { proxy } from "@/proxy";
 import { crearHerramientas } from "@/src/bot/herramientas";
+import { proveedorDesdeEntorno } from "@/src/bot/proveedor";
 import { MARCA_DEMO, responderDev } from "@/src/bot/responderDev";
 import { obtenerPerfil } from "@/src/dominio/perfiles";
 import { crearRepoMemoria } from "@/src/repo/memoria";
@@ -123,7 +124,21 @@ describe("deps", () => {
     expect(armarDeps({ NODE_ENV: "test", ANTHROPIC_MODEL: "claude-haiku-5-5" }).modelo).toBe("claude-haiku-5-5");
   });
 
-  it("en producción exige Supabase, la llave de Claude y la sal de la IP, con un error claro", () => {
+  it("con GEMINI_API_KEY y sin la de Claude contesta Gemini; con las dos, Claude", () => {
+    const gemini = armarDeps({ NODE_ENV: "test", GEMINI_API_KEY: "llave-de-prueba" });
+    expect(gemini.responder).not.toBe(responderDev);
+    expect(gemini.modelo).toBe("gemini-3.5-flash-lite");
+    expect(armarDeps({ NODE_ENV: "test", GEMINI_API_KEY: "llave-de-prueba", GEMINI_MODEL: "gemini-3.8-flash" }).modelo).toBe("gemini-3.8-flash");
+    expect(armarDeps({ NODE_ENV: "test", GEMINI_API_KEY: "llave-de-prueba", ANTHROPIC_API_KEY: "llave-de-prueba" }).modelo).toBe("claude-opus-5-5");
+
+    // El aviso de privacidad de la página nombra al mismo proveedor que arma deps.
+    expect(proveedorDesdeEntorno({})).toBe("claude");
+    expect(proveedorDesdeEntorno({ GEMINI_API_KEY: "" })).toBe("claude");
+    expect(proveedorDesdeEntorno({ GEMINI_API_KEY: "llave-de-prueba" })).toBe("gemini");
+    expect(proveedorDesdeEntorno({ GEMINI_API_KEY: "llave-de-prueba", ANTHROPIC_API_KEY: "llave-de-prueba" })).toBe("claude");
+  });
+
+  it("en producción exige Supabase, la llave de Claude o la de Gemini, y la sal de la IP, con un error claro", () => {
     const completo = {
       NODE_ENV: "production",
       AGENDA_SAL_IP: "sal-de-prueba",
@@ -134,7 +149,8 @@ describe("deps", () => {
     expect(() => armarDeps(completo)).not.toThrow();
     expect(() => armarDeps({ ...completo, SUPABASE_URL: "" })).toThrow("SUPABASE_URL");
     expect(() => armarDeps({ ...completo, SUPABASE_SERVICE_ROLE_KEY: undefined })).toThrow("SUPABASE_SERVICE_ROLE_KEY");
-    expect(() => armarDeps({ ...completo, ANTHROPIC_API_KEY: "" })).toThrow("ANTHROPIC_API_KEY");
+    expect(() => armarDeps({ ...completo, ANTHROPIC_API_KEY: "" })).toThrow("Falta ANTHROPIC_API_KEY o GEMINI_API_KEY");
+    expect(() => armarDeps({ ...completo, ANTHROPIC_API_KEY: "", GEMINI_API_KEY: "llave-de-prueba" })).not.toThrow();
     expect(() => armarDeps({ ...completo, AGENDA_SAL_IP: "" })).toThrow("AGENDA_SAL_IP");
   });
 });

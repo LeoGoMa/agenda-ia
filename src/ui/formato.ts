@@ -1,3 +1,4 @@
+import type { Proveedor } from "../bot/proveedor";
 import { MARCA_DEMO } from "../bot/responderDev";
 import { partesLocales } from "../dominio/tiempo";
 import type { PerfilNegocio } from "../dominio/tipos";
@@ -57,8 +58,12 @@ export function textoDeAviso(cuerpo: unknown): string {
 }
 
 /** El aviso de privacidad que va siempre junto al campo del chat, en el trato del negocio. */
-export const avisoPrivacidad = (trato: PerfilNegocio["trato"]) =>
-  `${trato === "usted" ? "Use" : "Usa"} nombre y teléfono inventados (55 0000 00xx). Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.`;
+export const avisoPrivacidad = (trato: PerfilNegocio["trato"], proveedor: Proveedor) =>
+  `${trato === "usted" ? "Use" : "Usa"} nombre y teléfono inventados (55 0000 00xx). ` +
+  (proveedor === "gemini"
+    ? // En el plan gratis de la API de Gemini, Google puede usar lo que se le manda para mejorar sus productos.
+      "Los mensajes los procesa Gemini (Google), que puede usarlos para mejorar sus productos; aquí se borran a los 7 días."
+    : "Los mensajes los procesa Claude (Anthropic) y se borran a los 7 días.");
 
 /** «1 cita», «27 citas», «1,284 mensajes»: una sola regla de singular y plural para todo lo que se cuenta. */
 export const contar = (n: number, singular: string, plural: string) =>

@@ -9,7 +9,7 @@ import type { Conversacion, Repositorio } from "../repo/tipos";
 import type { Limitador } from "./limites";
 
 const MAX_CARACTERES = 1000;
-/** Tope del historial serializado que se manda a Claude: cada llamada paga todo el historial como entrada. */
+/** Tope del historial serializado que se manda al modelo: cada llamada paga todo el historial como entrada. */
 const MAX_HISTORIAL_CARACTERES = 120_000;
 const TEXTOS: Record<PerfilNegocio["trato"], { invalido: string; limite: string; enEspera: string }> = {
   tu: {
@@ -24,14 +24,14 @@ const TEXTOS: Record<PerfilNegocio["trato"], { invalido: string; limite: string;
   },
 };
 
-/** `responder` del bot con el cliente de Claude y la config ya puestos; en las pruebas, uno falso sin red. */
+/** El responder del bot (Claude o Gemini) con su cliente y su config ya puestos; en las pruebas, uno falso sin red. */
 export type Responder = (entrada: Omit<Parameters<typeof responder>[0], "cliente" | "config">) => Promise<RespuestaBot>;
 
 export interface DepsChat {
   repo: Repositorio;
   limitador: Limitador;
   responder: Responder;
-  /** El modelo efectivo de Claude: entra en la versión del historial. */
+  /** El modelo efectivo, de Claude o de Gemini: entra en la versión del historial, así cambiar de proveedor lo reinicia. */
   modelo: string;
   ahora: () => Date;
 }
@@ -78,7 +78,7 @@ function versionPrompt(perfil: PerfilNegocio, definiciones: Anthropic.Beta.BetaT
 /**
  * Un mensaje del visitante: valida, revisa límites, lo guarda y, si la conversación está con el bot, le contesta.
  * Un texto inválido da 400 sin crear la conversación. Con un historial de más de 120 000 caracteres responde
- * el 429 sin llamar a Claude ni gastar contadores (el historial nunca se recorta).
+ * el 429 sin llamar al modelo ni gastar contadores (el historial nunca se recorta).
  * Un negocio inexistente lanza `DATOS_INVALIDOS`; un error del bot sube a quien llama sin guardar el turno a medias.
  */
 export async function manejarMensaje(

@@ -6,9 +6,10 @@ import { promptDelSistema } from "./prompt";
 
 type MensajeApi = Anthropic.Beta.Messages.BetaMessageParam;
 
-const MAX_TOKENS = 4000;
-const MAX_VUELTAS = 6;
-const TEXTOS: Record<PerfilNegocio["trato"], { negativa: string; sinTerminar: string }> = {
+// Los textos y topes de aquí abajo los comparte el responder de Gemini.
+export const MAX_TOKENS = 4000;
+export const MAX_VUELTAS = 6;
+export const TEXTOS: Record<PerfilNegocio["trato"], { negativa: string; sinTerminar: string }> = {
   tu: {
     negativa: "Perdón, no puedo ayudarte con eso. ¿Quieres que te comunique con una persona?",
     sinTerminar: "Perdón, no alcancé a terminar de revisarlo. ¿Me lo repites o quieres que te comunique con una persona?",
@@ -19,10 +20,10 @@ const TEXTOS: Record<PerfilNegocio["trato"], { negativa: string; sinTerminar: st
   },
 };
 /** Herramientas que se ejecutan en una sola vuelta; cada una puede ir a la base. */
-const MAX_HERRAMIENTAS_POR_VUELTA = 4;
-const NO_EJECUTADA_TOPE = `No se ejecutó: se llegó al tope de ${MAX_VUELTAS} vueltas de herramientas de este mensaje.`;
-const NO_EJECUTADA_CORTADA = "No se ejecutó: la respuesta se cortó antes de terminar.";
-const NO_EJECUTADA_DEMASIADAS = "Demasiadas consultas en una sola vuelta; pide menos a la vez.";
+export const MAX_HERRAMIENTAS_POR_VUELTA = 4;
+export const NO_EJECUTADA_TOPE = `No se ejecutó: se llegó al tope de ${MAX_VUELTAS} vueltas de herramientas de este mensaje.`;
+export const NO_EJECUTADA_CORTADA = "No se ejecutó: la respuesta se cortó antes de terminar.";
+export const NO_EJECUTADA_DEMASIADAS = "Demasiadas consultas en una sola vuelta; pide menos a la vez.";
 
 /** El tool_result de una herramienta que no se ejecutó: cada tool_use necesita el suyo o el siguiente mensaje da 400. */
 const noEjecutada = (toolUseId: string, mensaje: string): Anthropic.Beta.Messages.BetaToolResultBlockParam => ({

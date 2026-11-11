@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { proveedorDesdeEntorno } from "@/src/bot/proveedor";
 import { PERFILES } from "@/src/dominio/perfiles";
 import { Demo } from "@/src/ui/Demo";
 
@@ -42,8 +43,19 @@ export default async function PaginaDemo({ params }: PageProps<"/demo/[negocio]"
           </h1>
         </div>
       </header>
-      {/* Al cliente solo va lo que se muestra del perfil (sin políticas, precios ni preguntas frecuentes). */}
-      <Demo perfil={{ id, nombre, giro, zonaHoraria, trato, servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre })) }} />
+      {/* Al cliente solo va lo que se muestra del perfil (sin políticas, precios ni preguntas frecuentes). El proveedor se
+          lee al prerenderizar: en Vercel, cambiar la llave pide un redeploy, que vuelve a armar la página. */}
+      <Demo
+        perfil={{
+          id,
+          nombre,
+          giro,
+          zonaHoraria,
+          trato,
+          servicios: servicios.map((s) => ({ id: s.id, nombre: s.nombre })),
+          proveedor: proveedorDesdeEntorno(),
+        }}
+      />
     </main>
   );
 }

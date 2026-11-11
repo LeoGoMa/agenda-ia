@@ -10,7 +10,7 @@ Los negocios que trabajan con citas pierden clientes cuando nadie contesta el ch
 
 ![Demo de Agenda IA en escritorio: el chat del cliente a la izquierda y el panel del negocio a la derecha](docs/img/demo-escritorio.png)
 
-_A la izquierda escribe el cliente; a la derecha está el panel del negocio. En esta conversación el bot agendó una cita y luego pasó el chat a una persona, que contestó desde el panel. Las capturas se tomaron en modo de prueba, sin la IA conectada, así que las respuestas del bot son textos fijos (por eso la etiqueta «demo sin IA»). En la demo en vivo las escribe Claude._
+_A la izquierda escribe el cliente; a la derecha está el panel del negocio. En esta conversación el bot agendó una cita y luego pasó el chat a una persona, que contestó desde el panel. Las capturas se tomaron en modo de prueba, sin la IA conectada, así que las respuestas del bot son textos fijos (por eso la etiqueta «demo sin IA»). En la demo en vivo las escribe Gemini, de Google; el mismo bot funciona con Claude si se pone su llave._
 
 ## Lo que hace por un negocio
 
@@ -18,7 +18,7 @@ _A la izquierda escribe el cliente; a la derecha está el panel del negocio. En 
 2. **Una persona puede tomar el chat.** Cuando el cliente pide hablar con alguien, o el bot no puede resolver algo, el chat pasa a modo «persona». El negocio lo ve en su panel, contesta desde ahí y le regresa la conversación al bot cuando termina. Mientras una persona atiende, el bot no responde.
 3. **Un solo bot para cualquier negocio con citas.** La demo trae un consultorio dental, una barbería y un taller mecánico. Para otro negocio se escribe su perfil (horario, descansos, servicios, precios, reglas para agendar y cancelar, cuántas citas caben a la misma hora y preguntas frecuentes). El código no cambia.
 
-> **Datos ficticios.** Los tres negocios son inventados, igual que todos los nombres y teléfonos de la demo (los teléfonos tienen la forma `55 0000 00xx`). No escribas datos personales reales. Cada visitante tiene una sesión privada: nadie más ve tu chat ni tus citas, y todo se borra a los 7 días.
+> **Datos ficticios.** Los tres negocios son inventados, igual que todos los nombres y teléfonos de la demo (los teléfonos tienen la forma `55 0000 00xx`). No escribas datos personales reales. Cada visitante tiene una sesión privada: nadie más ve tu chat ni tus citas, y todo se borra a los 7 días. Los mensajes los procesa la IA; con Gemini en su plan gratis, Google puede guardarlos y usarlos para mejorar sus productos.
 
 ### Pruébalo en un minuto
 
@@ -52,7 +52,7 @@ Canal web          app/api/, src/web/     la sesión sale solo de la cookie; 401
   ▼
 Servicio de chat   src/servicio/          validación, límites de uso, modo bot o persona, historial
   ▼
-Bot                src/bot/               API de Claude con 8 herramientas, en un bucle de herramientas propio
+Bot                src/bot/               Claude o Gemini con 8 herramientas, en un bucle de herramientas propio
   ▼
 Dominio            src/dominio/           motor de disponibilidad y reglas de las citas (funciones puras, sin red ni base)
   ▼
@@ -62,8 +62,8 @@ Repositorio        src/repo/              una interfaz con dos versiones: en mem
 Qué pasa con un mensaje del cliente:
 
 1. `POST /api/chat` lee el id de sesión **solo** de la cookie. Una sesión nueva primero pasa un límite por IP; después se crea su fila y se siembran citas ficticias.
-2. El servicio de chat valida el texto (de 1 a 1000 caracteres), obtiene o crea la conversación y revisa los límites de uso. Si se pasa de un límite, responde 429 con un mensaje amable y no llama a Claude.
-3. Si una persona atiende el chat, el mensaje se guarda y el bot no responde. Si no, contesta Claude, que usa las herramientas que necesite (fecha y hora actuales, servicios, disponibilidad, agendar, cambiar, cancelar, buscar mis citas, pasar a una persona) en a lo más 6 vueltas.
+2. El servicio de chat valida el texto (de 1 a 1000 caracteres), obtiene o crea la conversación y revisa los límites de uso. Si se pasa de un límite, responde 429 con un mensaje amable y no llama al modelo.
+3. Si una persona atiende el chat, el mensaje se guarda y el bot no responde. Si no, contesta el modelo (Claude o Gemini), que usa las herramientas que necesite (fecha y hora actuales, servicios, disponibilidad, agendar, cambiar, cancelar, buscar mis citas, pasar a una persona) en a lo más 6 vueltas.
 4. Se guardan el historial completo de la API, la respuesta visible y, si lo hubo, el cambio de modo. El panel muestra el resultado en su siguiente actualización.
 
 Más detalle: [`docs/arquitectura.md`](docs/arquitectura.md).
@@ -74,7 +74,7 @@ Más detalle: [`docs/arquitectura.md`](docs/arquitectura.md).
 | --- | --- |
 | Aplicación | Next.js 16 (App Router, Cache Components, `proxy.ts`), React 19, TypeScript |
 | Interfaz | Tailwind CSS 4, sin librería de componentes |
-| IA | API de Claude con el SDK oficial `@anthropic-ai/sdk`; `claude-opus-5-5` por defecto, esfuerzo `low`, caché de prompts y fallbacks del lado del servidor |
+| IA | Gemini con el SDK oficial `@google/genai`, `gemini-3.5-flash-lite` en el plan gratis (lo que usa la demo), o Claude con `@anthropic-ai/sdk`, `claude-opus-5-5` con esfuerzo `low`, caché de prompts y fallbacks del lado del servidor. Las dos usan las mismas herramientas y el mismo prompt |
 | Datos | Supabase (Postgres) con RLS activada y sin políticas: solo entra el servidor, con la service role |
 | Validación | Zod 4 (perfiles de negocio, entradas de las herramientas y cuerpos de las peticiones) |
 | Pruebas | Vitest 5 |
@@ -91,16 +91,18 @@ npm run dev                  # http://localhost:3000
 ```
 
 - **Sin variables** todo corre en memoria, con un responder guionado que entiende tres pedidos («horarios», «agenda el primero» y «pasar a humano») y marca sus respuestas con «demo sin IA». No usa la red ni cuesta nada.
-- **`ANTHROPIC_API_KEY`** hace que conteste Claude.
+- **`GEMINI_API_KEY`** hace que conteste Gemini, en el plan gratis de Google, y **`ANTHROPIC_API_KEY`**, Claude. Si están las dos, contesta Claude.
 - **`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`** hacen que los datos vivan en Postgres. Antes corre [`supabase/migrations/0001_agenda.sql`](supabase/migrations/0001_agenda.sql) en el proyecto.
 - **Reinicia `npm run dev` después de cambiar `.env.local`.** Las dependencias se arman una vez y quedan en caché en `globalThis`, y esa caché sobrevive a la recarga en caliente.
-- En producción (`NODE_ENV=production`) no hay respaldo silencioso: sin Supabase, sin la llave de Anthropic o sin `AGENDA_SAL_IP`, la API responde 500 y el registro del servidor dice qué variable falta.
+- En producción (`NODE_ENV=production`) no hay respaldo silencioso: sin Supabase, sin la llave de Claude o la de Gemini, o sin `AGENDA_SAL_IP`, la API responde 500 y el registro del servidor dice qué variable falta.
 
 | Variable | Para qué | Por defecto |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Llave de la API de Claude | (responder guionado, solo en desarrollo) |
-| `ANTHROPIC_MODEL` | Id del modelo | `claude-opus-5-5` |
-| `AGENDA_EFFORT` | Esfuerzo (de `low` a `max`) | `low` |
+| `GEMINI_API_KEY` | Llave de la API de Gemini (Google AI Studio) | (responder guionado, solo en desarrollo) |
+| `GEMINI_MODEL` | Id del modelo de Gemini | `gemini-3.5-flash-lite` |
+| `ANTHROPIC_API_KEY` | Llave de la API de Claude; si está, gana sobre la de Gemini | (responder guionado, solo en desarrollo) |
+| `ANTHROPIC_MODEL` | Id del modelo de Claude | `claude-opus-5-5` |
+| `AGENDA_EFFORT` | Esfuerzo de Claude (de `low` a `max`) | `low` |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Postgres en Supabase, solo del lado del servidor | (en memoria, solo en desarrollo) |
 | `CRON_SECRET` | Protege `/api/limpieza`; lo manda el cron de Vercel | (sin ella, la limpieza responde 401) |
 | `AGENDA_SAL_IP` | Sal secreta para guardar las IP como hash en los contadores | obligatoria en producción |
@@ -116,7 +118,7 @@ El despliegue paso a paso (Supabase, Vercel, llaves y límite de gasto) está en
 ### Pruebas
 
 ```bash
-npx vitest run       # 150 pruebas; la integración con Supabase se salta sin credenciales
+npx vitest run       # 167 pruebas; la integración con Supabase y la de Gemini se saltan sin credenciales
 npx tsc --noEmit
 npm run lint
 npm run build        # también funciona sin variables de entorno
@@ -126,16 +128,16 @@ Qué cubren:
 
 - **Motor de disponibilidad:** zonas horarias, horarios de la tarde que en UTC ya son el día siguiente, descansos, ventanas para agendar y capacidad.
 - **Reglas de las citas:** corren contra el repositorio en memoria con una suite que se comparte con la de Supabase. Dos reservas en paralelo del mismo horario: solo una gana.
-- **El bucle de herramientas del bot:** con un cliente de Claude falso. Una cita fuera de horario se rechaza y no se guarda; también se prueban el tope de 6 vueltas, `max_tokens`, las negativas y el manejo del historial.
+- **El bucle de herramientas del bot:** con clientes falsos de Claude y de Gemini. Una cita fuera de horario se rechaza y no se guarda; también se prueban el tope de 6 vueltas, el corte por tokens, las negativas y bloqueos, el manejo del historial y, con Gemini, que las firmas de pensamiento vuelvan intactas y que una cuota agotada dé un aviso amable.
 - **Servicio de chat y límites:** al pasar el límite no se llama al bot; modo persona; validación del texto.
 - **Rutas de la API:** el id de sesión sale solo de la cookie; un `sesionId` en la consulta o en el cuerpo se ignora; respuestas 401 y 429.
 - **La siembra de citas ficticias, el formato de la interfaz y el sondeo del panel.**
 
-La suite de integración (`tests/integracion/`) corre las mismas pruebas del repositorio contra un Postgres real. Úsala con un proyecto de Supabase **de prueba**, nunca el de producción; en [`docs/despliegue.md`](docs/despliegue.md) está cómo correrla sin escribir las llaves en la terminal.
+La suite de integración (`tests/integracion/`) corre las mismas pruebas del repositorio contra un Postgres real. Úsala con un proyecto de Supabase **de prueba**, nunca el de producción; en [`docs/despliegue.md`](docs/despliegue.md) está cómo correrla sin escribir las llaves en la terminal. Con `GEMINI_API_KEY`, la misma carpeta corre además una conversación real con Gemini que debe terminar en una cita agendada.
 
 ### Decisiones
 
-**El gasto de IA tiene tope.** Todos los límites se revisan antes de llamar a Claude, así que alguien que manda mensajes sin parar no puede inflar la cuenta: mensajes por sesión y por IP cada hora, mensajes por conversación, conversaciones nuevas al día, mensajes que llegan al modelo al día y sesiones nuevas por IP cada hora, todos configurables. Cada llamada tiene `max_tokens: 4000`; cada mensaje, a lo más 6 vueltas de herramientas, y cada vuelta, a lo más 4 herramientas ejecutadas. El historial que se manda a Claude tiene un tope de 120 000 caracteres; nunca se recorta, y pasado ese tamaño la conversación solo recibe el aviso de límite. El prompt del negocio y la lista de herramientas son deterministas y van en caché; la fecha actual llega por una herramienta y no en el prompt, para no romper la caché. Además, configura un límite de gasto mensual en la cuenta de Anthropic antes de desplegar; ver [`docs/despliegue.md`](docs/despliegue.md#5-límite-de-gasto-en-anthropic).
+**El gasto de IA tiene tope.** Todos los límites se revisan antes de llamar al modelo, así que alguien que manda mensajes sin parar no puede inflar la cuenta: mensajes por sesión y por IP cada hora, mensajes por conversación, conversaciones nuevas al día, mensajes que llegan al modelo al día y sesiones nuevas por IP cada hora, todos configurables. Cada llamada tiene `max_tokens: 4000`; cada mensaje, a lo más 6 vueltas de herramientas, y cada vuelta, a lo más 4 herramientas ejecutadas. El historial que se manda al modelo tiene un tope de 120 000 caracteres; nunca se recorta, y pasado ese tamaño la conversación solo recibe el aviso de límite. El prompt del negocio y la lista de herramientas son deterministas y van en caché; la fecha actual llega por una herramienta y no en el prompt, para no romper la caché. Con Claude, configura además un límite de gasto mensual en la cuenta de Anthropic antes de desplegar; ver [`docs/despliegue.md`](docs/despliegue.md#5-si-usas-claude-límite-de-gasto-en-anthropic). Con Gemini en su plan gratis no hay cobro: si se pasa la cuota, Google responde 429 y el bot avisa que tiene demasiadas consultas.
 
 **La reserva es atómica.** Hay una sola regla de choque: intervalos semiabiertos `[inicio, fin)`, donde solo cuentan las citas confirmadas de la misma sesión y negocio, y un horario se rechaza cuando ya se enciman `capacidadPorHorario` citas (las que caben a la misma hora). La misma regla corre en el motor de disponibilidad, en el repositorio en memoria y en Postgres. En Postgres, `crear_cita_si_cabe` y `actualizar_cita_si_cabe` toman un candado de transacción por sesión y negocio, y cuentan y escriben dentro de la misma transacción. Si llegan dos mensajes al mismo tiempo por el mismo horario, se guarda una cita y la otra recibe `HORARIO_NO_DISPONIBLE`. El modelo nunca decide si un horario está libre: las herramientas revisan horario, políticas y capacidad diga lo que diga el cliente o el modelo («agéndame a las 3 a. m.», «ignora tus reglas»).
 

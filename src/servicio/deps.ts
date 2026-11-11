@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import { configDesdeEntorno, modeloDesdeEntorno, responder as responderClaude } from "../bot/responder";
 import { responderDev } from "../bot/responderDev";
+import { modeloGeminiDesdeEntorno, responderGemini } from "../bot/responderGemini";
 import { crearRepoMemoria } from "../repo/memoria";
 import { crearRepoSupabase } from "../repo/supabase";
 import { almacenSupabase } from "./almacenSupabase";
@@ -71,31 +73,39 @@ function armarDatos(env: Entorno, produccion: boolean): Datos {
   };
 }
 
-/** Claude con `ANTHROPIC_API_KEY`; sin ella, el responder guionado sin red (solo fuera de producción). */
-function armarResponder(env: Entorno, produccion: boolean): Responder {
+/**
+ * Claude con `ANTHROPIC_API_KEY`; si no, Gemini con `GEMINI_API_KEY` (la regla de `proveedorDesdeEntorno`). Sin
+ * ninguna, el responder guionado sin red, solo fuera de producción. Devuelve también el modelo efectivo.
+ */
+function armarResponder(env: Entorno, produccion: boolean): { responder: Responder; modelo: string } {
   if (env.ANTHROPIC_API_KEY) {
     const cliente = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     const config = configDesdeEntorno(env);
-    return (entrada) => responderClaude({ ...entrada, cliente, config });
+    return { responder: (entrada) => responderClaude({ ...entrada, cliente, config }), modelo: config.modelo };
+  }
+  if (env.GEMINI_API_KEY) {
+    const cliente = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+    const modelo = modeloGeminiDesdeEntorno(env);
+    return { responder: (entrada) => responderGemini({ ...entrada, cliente, modelo }), modelo };
   }
   if (produccion) {
-    throw new Error("Falta ANTHROPIC_API_KEY: en producción no se usa el responder de demostración (ver .env.example)");
+    throw new Error("Falta ANTHROPIC_API_KEY o GEMINI_API_KEY: en producción no se usa el responder de demostración (ver .env.example)");
   }
-  return responderDev;
+  return { responder: responderDev, modelo: modeloDesdeEntorno(env) };
 }
 
 /**
- * Arma las dependencias a partir del entorno. En producción, sin Supabase, sin la llave de Claude o sin
- * AGENDA_SAL_IP lanza un error que dice qué falta (y la ruta responde 500 genérico).
+ * Arma las dependencias a partir del entorno. En producción, sin Supabase, sin la llave de Claude ni la de Gemini,
+ * o sin AGENDA_SAL_IP, lanza un error que dice qué falta (y la ruta responde 500 genérico).
  */
 export function armarDeps(env: Entorno = process.env): Deps {
   const produccion = env.NODE_ENV === "production";
   const limites = limitesDesdeEntorno(env);
   const { almacen, existeSesion, crearSesion, ...datos } = armarDatos(env, produccion);
-  const responder = armarResponder(env, produccion);
+  const { responder, modelo } = armarResponder(env, produccion);
   if (env.NODE_ENV === "development") {
     const repo = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "Supabase" : "memoria";
-    console.info(`Agenda IA: datos en ${repo}, responder ${responder === responderDev ? "de demostración sin IA" : "de Claude"}.`);
+    console.info(`Agenda IA: datos en ${repo}, responder ${responder === responderDev ? "de demostración sin IA" : modelo}.`);
   }
   const ahora = () => new Date();
   const limitador = crearLimitador(almacen, limites);
@@ -110,7 +120,7 @@ export function armarDeps(env: Entorno = process.env): Deps {
     },
     limitador,
     responder,
-    modelo: modeloDesdeEntorno(env),
+    modelo,
     ahora,
   };
 }
